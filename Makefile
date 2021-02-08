@@ -8,6 +8,7 @@ COPT		= -g
 CFLAGS		= -Wall -D_GNU_SOURCE -I../console $(COPT)
 WORMHOLE	= wormhole
 WORMHOLE_SRCS	= wormhole.c \
+		  common.c \
 		  profiles.c \
 		  pathstate.c \
 		  runtime.c \
@@ -32,6 +33,7 @@ WORMHOLED_SRCS	= wormholed.c \
 WORMHOLED_OBJS	= $(WORMHOLED_SRCS:.c=.o)
 DIGGER		= wormhole-digger
 DIGGER_SRCS	= digger.c \
+		  common.c \
 		  profiles.c \
 		  pathstate.c \
 		  runtime.c \

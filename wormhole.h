@@ -21,10 +21,17 @@
 #ifndef _WORMHOLE_H
 #define _WORMHOLE_H
 
-#define WORMHOLE_SOCKET_PATH	"/var/run/wormhole.sock"
-#define WORMHOLE_CONFIG_PATH	"/etc/wormhole.conf"
-#define WORMHOLE_CLIENT_PATH	"/usr/bin/wormhole"
+#define WORMHOLE_SOCKET_PATH		"/var/run/wormhole.sock"
+#define WORMHOLE_CONFIG_PATH		"/etc/wormhole.conf"
+#define WORMHOLE_USER_CONFIG_PATH	"~/.wormhole/config"
+#define WORMHOLE_CLIENT_PATH		"/usr/bin/wormhole"
 
+extern void		wormhole_common_load_config(const char *opt_config_path);
+
+
+/*
+ * The following is really socket-client stuff...
+ */
 
 struct wormhole_message_namespace_response;
 typedef bool		wormhole_namespace_response_callback_fn_t(struct wormhole_message_namespace_response *msg, int nsfd, void *closure);
