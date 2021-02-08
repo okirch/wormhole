@@ -1,0 +1,10 @@
+*.pyc
+.*
+*.tar
+*.o
+*.a
+*.so
+wormhole
+wormhole-autoprofile
+wormhole-digger
+wormholed
