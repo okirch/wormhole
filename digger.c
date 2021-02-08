@@ -47,7 +47,6 @@ const char *		opt_config_path = NULL;
 const char *		opt_base_environment = NULL;
 const char *		opt_overlay_root = NULL;
 
-static void		load_config(void);
 static int		wormhole_digger(int argc, char **argv);
 
 int
@@ -75,35 +74,10 @@ main(int argc, char **argv)
 		}
 	}
 
-	load_config();
+	wormhole_common_load_config(opt_config_path);
 
 	return wormhole_digger(argc - optind, argv + optind);
 }
-
-static void
-load_config(void)
-{
-	struct wormhole_config *config;
-	const char *config_path;
-	const char *debug;
-
-	if ((debug = getenv("WORMHOLE_DEBUG")) != NULL) {
-		int level = atoi(debug);
-
-		tracing_set_level(level);
-	}
-
-	if ((config_path = opt_config_path) == NULL
-	 && (config_path = getenv("WORMHOLE_CONFIG")) == NULL)
-		config_path = WORMHOLE_CONFIG_PATH;
-
-	if (!(config = wormhole_config_load(config_path)))
-                log_fatal("Unable to load configuration file %s", config_path);
-
-	if (!wormhole_profiles_configure(config))
-		log_fatal("Bad configuration, cannot continue.");
-}
-
 
 struct overlay_mount_triple {
 	struct overlay_mount_triple *next;

@@ -32,7 +32,6 @@
 #include "util.h"
 #include "tracing.h"
 
-static void			load_config(void);
 static wormhole_profile_t *	find_profile(const char *argv0);
 static void			run_command(wormhole_profile_t *profile, int argc, char **argv);
 
@@ -46,35 +45,12 @@ main(int argc, char **argv)
 	if (argc == 0)
 		return 2;
 
-	load_config();
+	wormhole_common_load_config(NULL);
 
 	profile = find_profile(argv[0]);
 	run_command(profile, argc, argv);
 
 	return 22;
-}
-
-static void
-load_config(void)
-{
-	struct wormhole_config *config;
-	const char *config_path;
-	const char *debug;
-
-	if ((debug = getenv("WORMHOLE_DEBUG")) != NULL) {
-		int level = atoi(debug);
-
-		tracing_set_level(level);
-	}
-
-	if ((config_path = getenv("WORMHOLE_CONFIG")) == NULL)
-		config_path = WORMHOLE_CONFIG_PATH;
-
-	if (!(config = wormhole_config_load(config_path)))
-                log_fatal("Unable to load configuration file %s", config_path);
-
-	if (!wormhole_profiles_configure(config))
-		log_fatal("Bad configuration, cannot continue.");
 }
 
 static wormhole_profile_t *
