@@ -523,6 +523,18 @@ fsutil_mount_overlay(const char *lowerdir, const char *upperdir, const char *wor
 }
 
 bool
+fsutil_mount_bind(const char *source, const char *target)
+{
+	if (mount(source, target, NULL, MS_BIND, NULL) < 0) {
+		log_error("Unable to bind mount %s to %s: %m", source, target);
+		return false;
+	}
+
+	trace2("bind mounted %s to %s", source, target);
+	return true;
+}
+
+bool
 fsutil_mount_tmpfs(const char *where)
 {
 	trace("Mounting tmpfs at %s\n", where);
