@@ -552,3 +552,14 @@ fsutil_mount_tmpfs(const char *where)
 
 	return true;
 }
+
+bool
+fsutil_make_fs_private(const char *dir)
+{
+	if (mount("none", dir, NULL, MS_REC|MS_PRIVATE, NULL) == -1) {
+		log_error("Cannot change filesystem propagation of \"%s\" to private: %m", dir);
+		return false;
+	}
+
+	return true;
+}
