@@ -90,7 +90,7 @@ main(int argc, char **argv)
 }
 
 static bool
-wormhole_digger_build(char **argv)
+wormhole_digger_build(char **argv, const char *root_dir)
 {
 	int status;
 
@@ -115,7 +115,7 @@ wormhole_digger_build(char **argv)
 	 * the slave tty.
 	 */
 
-	if (!wormhole_run_command_argv(argv, NULL, &status))
+	if (!wormhole_run_command_argv(argv, root_dir, &status))
 		return false;
 
 	if (!wormhole_child_status_okay(status)) {
@@ -255,7 +255,7 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 	return assembled_tree;
 }
 
-bool
+wormhole_tree_state_t *
 smoke_and_mirrors(const char *overlay_dir)
 {
 	char lower_dir[PATH_MAX], upper_dir[PATH_MAX], work_dir[PATH_MAX], root_dir[PATH_MAX];
@@ -268,38 +268,34 @@ smoke_and_mirrors(const char *overlay_dir)
 	 || !__init_working_dir(overlay_dir, "tree", upper_dir, sizeof(upper_dir))
 	 || !__init_working_dir(overlay_dir, "work", work_dir, sizeof(work_dir))
 	 || !__init_working_dir(overlay_dir, "root", root_dir, sizeof(root_dir)))
-		return false;
+		return NULL;
 
 	/* User namespaces are a bit weird. This is the only way I got this to work. */
 	if (!fsutil_mount_bind("/", lower_dir, true))
-		return false;
+		return NULL;
 
 	if (!fsutil_mount_overlay(lower_dir, upper_dir, work_dir, root_dir))
-		return false;
+		return NULL;
 
 	assembled_tree = remount_filesystems(mnt_tree, overlay_dir, root_dir);
 	if (assembled_tree == NULL) {
 		log_error("Failed to set up file system hierarchy");
-		return false;
+		return NULL;
 	}
 
-	wormhole_tree_dump(assembled_tree);
-
-	if (chroot(root_dir) < 0) {
-		log_error("Unable to chroot to %s: %m", root_dir);
-		return false;
-	}
+	/* Tell the caller where to find the assembled tree */
+	wormhole_tree_state_set_root(assembled_tree, root_dir);
 
 	wormhole_tree_state_free(mnt_tree);
-
-	chdir("/");
-	return true;
+	return assembled_tree;
 }
 
 int
 wormhole_digger(int argc, char **argv)
 {
 	char *shell_argv[] = { "/bin/bash", NULL };
+	wormhole_tree_state_t *assembled_tree;
+	const char *root_dir;
 
 	if (argc == 0) {
 		shell_argv[0] = getenv("SHELL");
@@ -338,10 +334,12 @@ wormhole_digger(int argc, char **argv)
 			log_fatal("Failed to set up base environment %s", opt_base_environment);
 	}
 
-	if (!smoke_and_mirrors(opt_overlay_root))
+	assembled_tree = smoke_and_mirrors(opt_overlay_root);
+	if (assembled_tree == NULL)
 		log_fatal("unable to set up transparent overlay");
 
-	if (!wormhole_digger_build(argv))
+	root_dir = wormhole_tree_state_get_root(assembled_tree);
+	if (!wormhole_digger_build(argv, root_dir))
 		log_fatal("failed to build environment");
 
 	trace("Now combine the tree\n");
