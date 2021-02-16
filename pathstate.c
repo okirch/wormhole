@@ -55,8 +55,6 @@ struct wormhole_path_state_node {
 	wormhole_path_state_node_t *children;
 };
 
-extern void	wormhole_tree_dump(wormhole_tree_state_t *tree);
-
 static void
 __set_string(char **var, const char *value)
 {
@@ -136,6 +134,48 @@ wormhole_path_state_node_free(wormhole_path_state_node_t *ps)
 	if (ps->name)
 		free(ps->name);
 	free(ps);
+}
+
+const char *
+__wormhole_path_state_type_string(const wormhole_path_state_t *state)
+{
+	switch (state->state) {
+	case WORMHOLE_PATH_STATE_UNCHANGED:
+		return "unchanged";
+	case WORMHOLE_PATH_STATE_SYSTEM_MOUNT:
+		return "system-mount";
+	case WORMHOLE_PATH_STATE_BIND_MOUNTED:
+		return "bind-mounted";
+	case WORMHOLE_PATH_STATE_OVERLAY_MOUNTED:
+		return "overlay-mounted";
+	case WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED:
+		return "fake-overlay-mounted";
+	}
+
+	return "???";
+}
+
+static const char *
+__wormhole_path_state_describe(const wormhole_path_state_t *state)
+{
+	static char buffer[1024];
+
+	switch (state->state) {
+	case WORMHOLE_PATH_STATE_SYSTEM_MOUNT:
+		snprintf(buffer, sizeof(buffer), "system-mount type=%s device=%s",
+				state->system_mount.type,
+				state->system_mount.device);
+		return buffer;
+
+	case WORMHOLE_PATH_STATE_OVERLAY_MOUNTED:
+	case WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED:
+		snprintf(buffer, sizeof(buffer), "%s upperdir=%s",
+				__wormhole_path_state_type_string(state),
+				state->overlay.upperdir);
+		return buffer;
+	}
+
+	return __wormhole_path_state_type_string(state);
 }
 
 /*
@@ -313,7 +353,7 @@ wormhole_tree_dump(wormhole_tree_state_t *tree)
 				node->state.state,
 				wormhole_path_state_node_to_path(node));
 #else
-		printf("%*.*s%s\n", indent, indent, "", node->name?: "/");
+		printf("%*.*s%s (%s)\n", indent, indent, "", node->name?: "/", __wormhole_path_state_describe(&node->state));
 #endif
 
 		if (node->children) {
