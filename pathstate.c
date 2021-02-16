@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <assert.h>
 
 #include "wormhole.h"
@@ -53,6 +54,8 @@ struct wormhole_path_state_node {
 
 	wormhole_path_state_node_t *children;
 };
+
+extern void	wormhole_tree_dump(wormhole_tree_state_t *tree);
 
 static void
 __set_string(char **var, const char *value)
@@ -133,6 +136,48 @@ wormhole_path_state_node_free(wormhole_path_state_node_t *ps)
 	if (ps->name)
 		free(ps->name);
 	free(ps);
+}
+
+/*
+ * Helper function to construct the full path of a path state node
+ */
+static inline char *
+__path_prepend(const char *buf_base, char *buf_pos, const char *name)
+{
+	unsigned int left, name_len;
+
+	left = buf_pos - buf_base;
+	name_len = strlen(name);
+
+	if (name_len + 1 > left)
+		return NULL;
+
+	buf_pos -= name_len;
+	memcpy(buf_pos, name, name_len);
+
+	*(--buf_pos) = '/';
+
+	return buf_pos;
+}
+
+static const char *
+wormhole_path_state_node_to_path(const wormhole_path_state_node_t *node)
+{
+	static char buffer[PATH_MAX];
+	char *w;
+
+	w = &buffer[sizeof(buffer) - 1];
+	*w = '\0';
+
+	while (node && w && node->name) {
+		w = __path_prepend(buffer, w, node->name);
+		node = node->parent;
+	}
+
+	if (w && *w == '\0')
+		return "/";
+
+	return w;
 }
 
 wormhole_path_state_node_t *
@@ -248,4 +293,135 @@ wormhole_tree_state_set_fake_overlay_mounted(wormhole_tree_state_t *tree, const 
 	trace("path state fake_overlay_mounted at %s: upper=%s", path, upperdir);
 	ps = __wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED);
 	wormhole_path_state_set_upperdir(&ps->state, upperdir);
+}
+
+struct wormhole_tree_walker {
+	wormhole_tree_state_t *		tree;
+	wormhole_path_state_node_t *	pos;
+	bool				skip_children;
+};
+
+void
+wormhole_tree_dump(wormhole_tree_state_t *tree)
+{
+	wormhole_path_state_node_t *node = tree->root;
+	unsigned int indent = 0;
+
+	while (node) {
+#if 0
+		printf("%*.*s%2d %s\n", indent, indent, "",
+				node->state.state,
+				wormhole_path_state_node_to_path(node));
+#else
+		printf("%*.*s%s\n", indent, indent, "", node->name?: "/");
+#endif
+
+		if (node->children) {
+			node = node->children;
+			indent ++;
+		} else {
+			while (node) {
+				if (node->next) {
+					node = node->next;
+					break;
+				}
+
+				node = node->parent;
+				indent --;
+			};
+		}
+	}
+}
+
+wormhole_tree_walker_t *
+wormhole_tree_walk(wormhole_tree_state_t *tree)
+{
+	wormhole_tree_walker_t *t;
+
+	t = calloc(1, sizeof(*t));
+	t->tree = tree;
+	t->pos = tree->root;
+
+	/* wormhole_tree_dump(tree); */
+
+	return t;
+}
+
+void
+wormhole_tree_walk_end(wormhole_tree_walker_t *t)
+{
+	memset(t, 0, sizeof(*t));
+	free(t);
+}
+
+static wormhole_path_state_node_t *
+__traverse_right(wormhole_path_state_node_t *node)
+{
+	do {
+		trace_path("looking for siblings of %s", wormhole_path_state_node_to_path(node));
+		if (node->next) {
+			node = node->next;
+			break;
+		}
+
+		trace_path("no more siblings of %s, going up", wormhole_path_state_node_to_path(node));
+
+		node = node->parent;
+	} while (node);
+
+	return node;
+}
+
+static wormhole_path_state_node_t *
+__traverse_down(wormhole_path_state_node_t *node, bool skip_children)
+{
+	trace_path("%s(%s)", __func__, wormhole_path_state_node_to_path(node));
+	while (node) {
+		if (node->children && !skip_children) {
+			trace_path(" inspecting children of %s (%d)", wormhole_path_state_node_to_path(node), node->state.state);
+			node = node->children;
+		} else {
+			node = __traverse_right(node);
+		}
+
+		if (node && node->state.state > 0)
+			break;
+
+		skip_children = false;
+	}
+
+	return node;
+}
+
+wormhole_path_state_t *
+wormhole_tree_walk_next(wormhole_tree_walker_t *t, const char **path_p)
+{
+	wormhole_path_state_node_t *node;
+	const char *path;
+
+	if (t->pos == NULL)
+		return NULL;
+
+	if (!(node = __traverse_down(t->pos, t->skip_children))) {
+		t->pos = NULL;
+		return NULL;
+	}
+
+	t->skip_children = false;
+	t->pos = node;
+
+	path = wormhole_path_state_node_to_path(node);
+
+	if (path_p)
+		*path_p = path;
+
+	trace_path("%s() returns %s", __func__, path);
+	return &node->state;
+}
+
+void
+wormhole_tree_walk_skip_children(wormhole_tree_walker_t *t)
+{
+	trace_path("Going to skip children of %s", wormhole_path_state_node_to_path(t->pos));
+	t->skip_children = true;
 }

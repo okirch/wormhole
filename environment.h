@@ -48,6 +48,7 @@ enum {
 };
 
 typedef struct wormhole_tree_state	wormhole_tree_state_t;
+typedef struct wormhole_tree_walker	wormhole_tree_walker_t;
 typedef struct wormhole_path_state_node wormhole_path_state_node_t;
 
 typedef struct wormhole_path_state {
@@ -102,6 +103,11 @@ extern void			wormhole_tree_state_set_system_mount(wormhole_tree_state_t *, cons
 extern void			wormhole_tree_state_set_bind_mounted(wormhole_tree_state_t *, const char *path);
 extern void			wormhole_tree_state_set_overlay_mounted(wormhole_tree_state_t *, const char *path, const char *upperdir);
 extern void			wormhole_tree_state_set_fake_overlay_mounted(wormhole_tree_state_t *, const char *path, const char *upperdir);
+
+extern wormhole_tree_walker_t *wormhole_tree_walk(wormhole_tree_state_t *tree);
+extern wormhole_path_state_t *	wormhole_tree_walk_next(wormhole_tree_walker_t *t, const char **path_p);
+extern void			wormhole_tree_walk_skip_children(wormhole_tree_walker_t *t);
+extern void			wormhole_tree_walk_end(wormhole_tree_walker_t *t);
 
 extern wormhole_tree_state_t *	wormhole_get_mount_state(const char *mtab);
 
