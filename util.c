@@ -182,7 +182,7 @@ wormhole_fork_with_socket(int *fdp)
 }
 
 bool
-wormhole_run_command_argv(char **argv, int *status_ret)
+wormhole_run_command_argv(char **argv, const char *root_dir, int *status_ret)
 {
 	int status;
 	pid_t pid;
@@ -194,6 +194,14 @@ wormhole_run_command_argv(char **argv, int *status_ret)
 
 	if (pid == 0) {
 		const char *command = argv[0];
+
+		if (root_dir) {
+			if (chroot(root_dir) < 0) {
+				log_error("Unable to chroot to %s: %m", root_dir);
+				exit(67);
+			}
+			chdir("/");
+		}
 
 		execvp(command, argv);
 

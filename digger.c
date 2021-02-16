@@ -115,7 +115,7 @@ wormhole_digger_build(char **argv)
 	 * the slave tty.
 	 */
 
-	if (!wormhole_run_command_argv(argv, &status))
+	if (!wormhole_run_command_argv(argv, NULL, &status))
 		return false;
 
 	if (!wormhole_child_status_okay(status)) {
