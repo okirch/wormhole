@@ -18,12 +18,10 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <sys/stat.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
-#include <sched.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -91,95 +89,21 @@ main(int argc, char **argv)
 	return wormhole_digger(argc - optind, argv + optind);
 }
 
-struct overlay_mount_triple {
-	struct overlay_mount_triple *next;
-
-	const char *	dirname;
-	char		tree_path[PATH_MAX];
-	char		work_path[PATH_MAX];
-};
-
-static struct overlay_mount_triple *
-prepare_overlay_mount_point(const char *overlay_root, const char *dirname)
-{
-	struct overlay_mount_triple *triple;
-
-	triple = calloc(1, sizeof(*triple));
-	triple->dirname = dirname;
-
-	snprintf(triple->tree_path, sizeof(triple->tree_path), "%s/tree%s", overlay_root, dirname);
-	snprintf(triple->work_path, sizeof(triple->work_path), "%s/work%s", overlay_root, dirname);
-
-	if (!fsutil_makedirs(triple->tree_path, 0755))
-		log_fatal("Unable to create %s", triple->tree_path);
-	if (!fsutil_makedirs(triple->work_path, 0755))
-		log_fatal("Unable to create %s", triple->work_path);
-
-	return triple;
-}
-
-static bool
-validate_overlay_mounts(const char *overlay_root, const char **dir_list)
-{
-	const char *dirname;
-
-	if (overlay_root == NULL) {
-		log_error("Please specify a root directory via --overlay-root");
-		return false;
-	}
-
-	while ((dirname = *dir_list++) != NULL) {
-		if (fsutil_check_path_prefix(overlay_root, dirname)) {
-			log_error("Invalid overlay root %s resides below %s", overlay_root, dirname);
-			return false;
-		}
-	}
-
-	return true;
-}
-
-static struct overlay_mount_triple *
-prepare_overlay_mounts(const char *overlay_root, const char **dir_list)
-{
-	struct overlay_mount_triple *list = NULL;
-	struct overlay_mount_triple **tail = &list;
-	const char *dirname;
-
-	while ((dirname = *dir_list++) != NULL) {
-		*tail = prepare_overlay_mount_point(overlay_root, dirname);
-		tail = &(*tail)->next;
-	}
-
-	return list;
-}
-
 struct wormhole_digger_config {
-	struct overlay_mount_triple *overlays;
-
 	char **		argv;
 };
 
 static bool
 wormhole_digger_setup_environment(struct wormhole_digger_config *cb)
 {
-	struct overlay_mount_triple *triple;
 	const char *command;
 
 	/* Unshare the namespace so that any nonsense that happens in the subprocess we spawns
-	 * stays local to that execution context. */
-	if (geteuid() == 0) {
-		if (unshare(CLONE_NEWNS) < 0) {
-			log_error("unshare: %m");
-			return false;
-		}
-	}
-
-	for (triple = cb->overlays; triple; triple = triple->next) {
-		const char *dirname = triple->dirname;
-
-		if (!fsutil_mount_overlay(dirname, triple->tree_path, triple->work_path, dirname))
-			log_fatal("Unable to create a transparent overlay at %s", dirname);
-	}
+	 * stays local to that execution context.
+	 * This should not be needed here any longer.
+	 */
+	if (geteuid() == 0 && !wormhole_create_namespace())
+		return false;
 
 	(void) chdir("/");
 
@@ -367,26 +291,6 @@ wormhole_digger(int argc, char **argv)
 {
 	struct wormhole_digger_config closure;
 	char *shell_argv[] = { "/bin/bash", NULL };
-	static const char *overlay_dirs[] = {
-		"/bin",
-		"/boot",
-//		"/dev",
-		"/etc",
-		"/lib",
-		"/lib64",
-		"/opt",
-		"/sbin",
-		"/usr",
-		"/var/cache",
-		"/var/lib",
-		"/var/lock",
-		"/var/log",
-		"/var/opt",
-		"/var/run",
-		"/var/spool",
-		"/run",
-		NULL,
-	};
 
 	memset(&closure, 0, sizeof(closure));
 	if (argc != 0) {
@@ -398,8 +302,10 @@ wormhole_digger(int argc, char **argv)
 		closure.argv = shell_argv;
 	}
 
-	if (!validate_overlay_mounts(opt_overlay_root, overlay_dirs))
-		log_fatal("Invalid arguments");
+	if (opt_overlay_root == NULL) {
+		log_error("Please specify a root directory via --overlay-root");
+		return false;
+	}
 
 	if (!fsutil_makedirs(opt_overlay_root, 0755))
 		log_fatal("Unable to create overlay root at %s", opt_overlay_root);
@@ -412,9 +318,8 @@ wormhole_digger(int argc, char **argv)
 			log_fatal("Unable to set up user namespace");
 	}
 
-	fsutil_make_fs_private("/");
-
-	// closure.overlays = prepare_overlay_mounts(opt_overlay_root, overlay_dirs);
+	if (!fsutil_make_fs_private("/"))
+		log_fatal("Unable to change file system root to private (no propagation)");
 
 	if (opt_base_environment != 0) {
 		/* Set up base environment */
