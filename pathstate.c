@@ -30,6 +30,14 @@
 #include "tracing.h"
 #include "environment.h"
 
+#undef DEBUG_PATHSTATE
+
+#ifdef DEBUG_PATHSTATE
+# define trace_path		trace3
+#else
+# define trace_path		notrace
+#endif
+
 
 struct wormhole_tree_state {
 	wormhole_path_state_node_t *	root;
@@ -142,19 +150,23 @@ wormhole_path_state_node_lookup(wormhole_tree_state_t *tree, const char *path, b
 	for (s = strtok(path_copy, "/"); s && current; s = strtok(NULL, "/")) {
 		wormhole_path_state_node_t *child;
 
+		trace_path("Looking for %s below %s", s, wormhole_path_state_node_to_path(current));
 		for (child = current->children; child != NULL; child = child->next) {
 			if (!strcmp(child->name, s))
-				return child;
+				break;
 		}
 
 		if (child || !create) {
 			current = child;
 		} else {
+			trace_path("Creating new node \"%s\" as child of %s", s, wormhole_path_state_node_to_path(current));
 			current = wormhole_path_state_node_new(s, current);
 		}
 	}
 
 	free(path_copy);
+
+	trace_path("%s(%s) returns node %s", __func__, path, wormhole_path_state_node_to_path(current));
 	return current;
 }
 
