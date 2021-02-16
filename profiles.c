@@ -26,7 +26,6 @@
 #include <unistd.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <sys/mount.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -767,10 +766,8 @@ wormhole_profile_setup(wormhole_profile_t *profile, bool userns)
 
 #if 0
 	/* This does not look right in this place. */
-	if (mount("none", "/", NULL, MS_REC|MS_PRIVATE, NULL) == -1) {
-		log_error("cannot make / private: %m");
-		return -1;
-	}
+	if (!fsutil_make_fs_private("/"))
+                log_fatal("Unable to change file system root to private (no propagation)");
 #endif
 
 	if (userns) {
