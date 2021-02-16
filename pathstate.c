@@ -64,6 +64,13 @@ wormhole_path_state_set_upperdir(wormhole_path_state_t *state, const char *path)
 	__set_string(&state->overlay.upperdir, path);
 }
 
+static inline void
+wormhole_path_state_set_mount_info(wormhole_path_state_t *state, const char *type, const char *device)
+{
+	__set_string(&state->system_mount.type, type);
+	__set_string(&state->system_mount.device, device);
+}
+
 static void
 wormhole_path_state_clear(wormhole_path_state_t *state)
 {
@@ -71,6 +78,9 @@ wormhole_path_state_clear(wormhole_path_state_t *state)
 	case WORMHOLE_PATH_STATE_OVERLAY_MOUNTED:
 	case WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED:
 		__set_string(&state->overlay.upperdir, NULL);
+		break;
+	case WORMHOLE_PATH_STATE_SYSTEM_MOUNT:
+		wormhole_path_state_set_mount_info(state, NULL, NULL);
 		break;
 	}
 }
@@ -189,6 +199,16 @@ __wormhole_tree_state_set(wormhole_tree_state_t *tree, const char *path, int new
 
 	ps->state.state = new_state;
 	return ps;
+}
+
+void
+wormhole_tree_state_set_system_mount(wormhole_tree_state_t *tree, const char *path, const char *type, const char *device)
+{
+	wormhole_path_state_node_t *ps;
+
+	trace2("path state system_mount at %s", path);
+	ps = __wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_SYSTEM_MOUNT);
+	wormhole_path_state_set_mount_info(&ps->state, type, device);
 }
 
 void

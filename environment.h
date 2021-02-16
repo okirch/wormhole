@@ -41,6 +41,7 @@ typedef struct wormhole_path_info {
 
 enum {
 	WORMHOLE_PATH_STATE_UNCHANGED = 0,
+	WORMHOLE_PATH_STATE_SYSTEM_MOUNT,
 	WORMHOLE_PATH_STATE_BIND_MOUNTED,
 	WORMHOLE_PATH_STATE_OVERLAY_MOUNTED,
 	WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED,
@@ -55,6 +56,10 @@ typedef struct wormhole_path_state {
 		struct {
 			char *	upperdir;
 		} overlay;
+		struct {
+			char *	type;
+			char *	device;
+		} system_mount;
 	};
 } wormhole_path_state_t;
 
@@ -93,6 +98,7 @@ extern void			wormhole_environment_set_fd(wormhole_environment_t *env, int fd);
 extern wormhole_tree_state_t *	wormhole_tree_state_new(void);
 extern void			wormhole_tree_state_free(wormhole_tree_state_t *tree);
 extern const wormhole_path_state_t *wormhole_path_tree_get(wormhole_tree_state_t *tree, const char *path);
+extern void			wormhole_tree_state_set_system_mount(wormhole_tree_state_t *, const char *path, const char *type, const char *device);
 extern void			wormhole_tree_state_set_bind_mounted(wormhole_tree_state_t *, const char *path);
 extern void			wormhole_tree_state_set_overlay_mounted(wormhole_tree_state_t *, const char *path, const char *upperdir);
 extern void			wormhole_tree_state_set_fake_overlay_mounted(wormhole_tree_state_t *, const char *path, const char *upperdir);
