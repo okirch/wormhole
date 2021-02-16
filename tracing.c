@@ -37,6 +37,7 @@ unsigned int	tracing_level = 0;
 
 void		(*__tracing_hook)(const char *fmt, ...);
 void		(*__tracing_hook2)(const char *fmt, ...);
+void		(*__tracing_hook3)(const char *fmt, ...);
 
 static FILE *	logfile = NULL;
 static bool	logging_to_tty = false;
@@ -211,6 +212,8 @@ static void
 __tracing_update_hooks(void)
 {
 	switch (tracing_level) {
+	case 3:
+		__tracing_hook3 = log_debug;
 	case 2:
 		__tracing_hook2 = log_debug;
 	case 1:

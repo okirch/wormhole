@@ -25,6 +25,7 @@
 
 extern void		(*__tracing_hook)(const char *fmt, ...);
 extern void		(*__tracing_hook2)(const char *fmt, ...);
+extern void		(*__tracing_hook3)(const char *fmt, ...);
 
 #define trace(...) do { \
 		if (__tracing_hook) \
@@ -33,6 +34,12 @@ extern void		(*__tracing_hook2)(const char *fmt, ...);
 #define trace2(...) do { \
 		if (__tracing_hook2) \
 			__tracing_hook2(__VA_ARGS__); \
+	} while (0)
+#define trace3(...) do { \
+		if (__tracing_hook3) \
+			__tracing_hook3(__VA_ARGS__); \
+	} while (0)
+#define notrace(...) do { \
 	} while (0)
 
 extern unsigned int	tracing_level;
