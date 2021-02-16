@@ -185,7 +185,7 @@ __remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, 
 	wormhole_tree_walker_t *walk;
 	wormhole_path_state_t *ps;
 	const char *mount_point;
-
+	unsigned int mount_index = 0;
 
 	walk = wormhole_tree_walk(mnt_tree);
 	while ((ps = wormhole_tree_walk_next(walk, &mount_point)) != NULL) {
@@ -220,13 +220,16 @@ __remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, 
 		} else if (access(mount_point, X_OK) < 0) {
 			trace("Ignoring potential overlay %s (type %s): inaccessible to this user", mount_point, fstype);
 		} else {
+			char subtree_dir[PATH_MAX];
 			char upper_dir[PATH_MAX], work_dir[PATH_MAX], dest_dir[PATH_MAX];
 
 			trace("Trying to overlay %s (type %s; originally from %s)", mount_point, fstype, ps->system_mount.device);
-			if (!__init_working_dir3(overlay_dir, "tree", mount_point, upper_dir, sizeof(upper_dir)))
+			snprintf(subtree_dir, sizeof(subtree_dir), "%s/subtree.%u", overlay_dir, mount_index++);
+
+			if (!__init_working_dir(subtree_dir, "tree", upper_dir, sizeof(upper_dir)))
 				return false;
 
-			if (!__init_working_dir3(overlay_dir, "work2", mount_point, work_dir, sizeof(work_dir)))
+			if (!__init_working_dir(subtree_dir, "work", work_dir, sizeof(work_dir)))
 				return false;
 
 			snprintf(dest_dir, sizeof(dest_dir), "%s%s", root_dir, mount_point);
@@ -290,6 +293,55 @@ smoke_and_mirrors(const char *overlay_dir)
 	return assembled_tree;
 }
 
+static bool
+combine_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
+{
+	char tree_root[PATH_MAX];
+	wormhole_tree_walker_t *walk;
+	wormhole_path_state_t *state;
+	const char *mount_point;
+
+	snprintf(tree_root, sizeof(tree_root), "%s/tree", overlay_root);
+
+	walk = wormhole_tree_walk(assembled_tree);
+	while ((state = wormhole_tree_walk_next(walk, &mount_point)) != NULL) {
+		const char *delta_dir;
+		const char *mount_parent;
+		char mount_dest[PATH_MAX];
+
+		if (state->state != WORMHOLE_PATH_STATE_OVERLAY_MOUNTED)
+			continue;
+
+		delta_dir = state->overlay.upperdir;
+
+		if (!fsutil_dir_exists(delta_dir)) {
+			trace("Ignoring subtree for %s - %s is not a directory", mount_point, delta_dir);
+			continue;
+		}
+		if (fsutil_dir_is_empty(delta_dir)) {
+			trace("Ignoring subtree for %s - directory %s is empty", mount_point, delta_dir);
+			continue;
+		}
+
+		trace("Found subtree at %s, %s exists and is not empty", mount_point, delta_dir);
+		mount_parent = pathutil_dirname(mount_point);
+
+		if (!__init_working_dir(tree_root, mount_parent, mount_dest, sizeof(mount_dest)))
+			return false;
+
+		snprintf(mount_dest, sizeof(mount_dest), "%s%s", tree_root, mount_point);
+		if (rename(delta_dir, mount_dest) < 0) {
+			log_error("Cannot merge %s into tree at %s: %m", delta_dir, mount_dest);
+			return false;
+		}
+
+		trace("Renamed %s to %s", delta_dir, mount_dest);
+	}
+
+	wormhole_tree_walk_end(walk);
+	return true;
+}
+
 int
 wormhole_digger(int argc, char **argv)
 {
@@ -343,6 +395,8 @@ wormhole_digger(int argc, char **argv)
 		log_fatal("failed to build environment");
 
 	trace("Now combine the tree\n");
+	if (!combine_tree(opt_overlay_root, assembled_tree))
+		log_fatal("failed to combine subtrees");
 
 	return 0;
 }
