@@ -151,7 +151,8 @@ __init_working_dir3(const char *parent_dir, const char *middle, const char *name
 }
 
 static bool
-remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, const char *root_dir)
+__remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, const char *root_dir,
+			wormhole_tree_state_t *assembled_tree)
 {
 	/* We should use a better heuristic to identify these types of file systems. */
 	static const char *virtual_filesystems[] = {
@@ -209,6 +210,8 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 				return false;
 			}
 			wormhole_tree_walk_skip_children(walk);
+
+			wormhole_tree_state_set_bind_mounted(assembled_tree, mount_point);
 		} else if (strutil_string_in_list(fstype, no_overlay_filesystems)) {
 			trace("Ignoring %s, file system type %s does not support overlays", mount_point, fstype);
 		} else if (fsutil_check_path_prefix(overlay_dir, mount_point)) {
@@ -229,6 +232,8 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 
 			if (!fsutil_mount_overlay(mount_point, upper_dir, work_dir, dest_dir))
 				return false;
+
+			wormhole_tree_state_set_overlay_mounted(assembled_tree, mount_point, upper_dir);
 		}
 	}
 
@@ -236,11 +241,25 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 	return true;
 }
 
+static wormhole_tree_state_t *
+remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, const char *root_dir)
+{
+	wormhole_tree_state_t *assembled_tree;
+
+	assembled_tree = wormhole_tree_state_new();
+	if (!__remount_filesystems(mnt_tree, overlay_dir, root_dir, assembled_tree)) {
+		wormhole_tree_state_free(assembled_tree);
+		return NULL;
+	}
+	return assembled_tree;
+}
+
 bool
 smoke_and_mirrors(const char *overlay_dir)
 {
 	char lower_dir[PATH_MAX], upper_dir[PATH_MAX], work_dir[PATH_MAX], root_dir[PATH_MAX];
 	wormhole_tree_state_t *mnt_tree;
+	wormhole_tree_state_t *assembled_tree;
 
 	mnt_tree = wormhole_get_mount_state(NULL);
 
@@ -257,10 +276,13 @@ smoke_and_mirrors(const char *overlay_dir)
 	if (!fsutil_mount_overlay(lower_dir, upper_dir, work_dir, root_dir))
 		return false;
 
-	if (!remount_filesystems(mnt_tree, overlay_dir, root_dir)) {
+	assembled_tree = remount_filesystems(mnt_tree, overlay_dir, root_dir);
+	if (assembled_tree == NULL) {
 		log_error("Failed to set up file system hierarchy");
 		return false;
 	}
+
+	wormhole_tree_dump(assembled_tree);
 
 	if (chroot(root_dir) < 0) {
 		log_error("Unable to chroot to %s: %m", root_dir);
