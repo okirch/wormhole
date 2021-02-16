@@ -150,16 +150,6 @@ __init_working_dir3(const char *parent_dir, const char *middle, const char *name
 	return true;
 }
 
-static inline void
-__remount(const char *new_root, const char *mp)
-{
-	char path[PATH_MAX];
-
-	snprintf(path, sizeof(path), "%s%s", new_root, mp);
-	if (!fsutil_mount_bind(mp, path, true))
-		log_fatal("Failed to set up mount tree");
-}
-
 static bool
 __string_in_list(const char *needle, const char **haystack)
 {
@@ -221,8 +211,14 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 		fstype = ps->system_mount.type;
 
 		if (__string_in_list(fstype, virtual_filesystems)) {
-			trace("Just try to bind mount %s", mount_point);
-			__remount(root_dir, mount_point);
+			char dest_dir[PATH_MAX];
+
+			trace("Trying to bind mount virtual FS %s (type %s)", mount_point, fstype);
+			snprintf(dest_dir, sizeof(dest_dir), "%s%s", root_dir, mount_point);
+			if (!fsutil_mount_bind(mount_point, dest_dir, true)) {
+				log_error("Failed to set up mount tree");
+				return false;
+			}
 			wormhole_tree_walk_skip_children(walk);
 		} else if (__string_in_list(fstype, no_overlay_filesystems)) {
 			trace("Ignoring %s, file system type %s does not support overlays", mount_point, fstype);
@@ -231,7 +227,7 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 		} else {
 			char upper_dir[PATH_MAX], work_dir[PATH_MAX], dest_dir[PATH_MAX];
 
-			trace("Trying to overlay %s %s (originally from %s)", mount_point, fstype, ps->system_mount.device);
+			trace("Trying to overlay %s (type %s; originally from %s)", mount_point, fstype, ps->system_mount.device);
 			if (!__init_working_dir3(overlay_dir, "tree", mount_point, upper_dir, sizeof(upper_dir)))
 				return false;
 
