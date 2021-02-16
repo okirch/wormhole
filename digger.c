@@ -187,6 +187,7 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 	static const char *no_overlay_filesystems[] = {
 		"fat",
 		"vfat",
+		"nfs",	/* not working very well either */
 
 		NULL
 	};
@@ -224,6 +225,8 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 			trace("Ignoring %s, file system type %s does not support overlays", mount_point, fstype);
 		} else if (fsutil_check_path_prefix(overlay_dir, mount_point)) {
 			trace("Ignoring %s, because it's a parent directory of our overlay directory", mount_point);
+		} else if (access(mount_point, X_OK) < 0) {
+			trace("Ignoring potential overlay %s (type %s): inaccessible to this user", mount_point, fstype);
 		} else {
 			char upper_dir[PATH_MAX], work_dir[PATH_MAX], dest_dir[PATH_MAX];
 
@@ -319,7 +322,13 @@ wormhole_digger(int argc, char **argv)
 
 	if (opt_base_environment != 0) {
 		/* Set up base environment */
-		/* wormhole_client_namespace_request(opt_base_environment, wormhole_namespace_response_callback, &closure); */
+		wormhole_environment_t *env = NULL;
+
+                if ((env = wormhole_environment_find(opt_base_environment)) == NULL)
+			log_fatal("Unknown environment %s", opt_base_environment);
+
+		if (!wormhole_environment_setup(env))
+			log_fatal("Failed to set up base environment %s", opt_base_environment);
 	}
 
 	if (!smoke_and_mirrors(opt_overlay_root))
