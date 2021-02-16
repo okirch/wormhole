@@ -36,6 +36,7 @@ DIGGER_SRCS	= digger.c \
 		  common.c \
 		  profiles.c \
 		  pathstate.c \
+		  mntent.c \
 		  runtime.c \
 		  rt-podman.c \
 		  config.c \
