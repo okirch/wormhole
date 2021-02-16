@@ -89,14 +89,10 @@ main(int argc, char **argv)
 	return wormhole_digger(argc - optind, argv + optind);
 }
 
-struct wormhole_digger_config {
-	char **		argv;
-};
-
 static bool
-wormhole_digger_setup_environment(struct wormhole_digger_config *cb)
+wormhole_digger_build(char **argv)
 {
-	const char *command;
+	int status;
 
 	/* Unshare the namespace so that any nonsense that happens in the subprocess we spawns
 	 * stays local to that execution context.
@@ -119,11 +115,16 @@ wormhole_digger_setup_environment(struct wormhole_digger_config *cb)
 	 * the slave tty.
 	 */
 
-	command = cb->argv[0];
-	execvp(command, cb->argv);
+	if (!wormhole_run_command_argv(argv, &status))
+		return false;
 
-	log_error("Unable to execute %s: %m", command);
-	return false;
+	if (!wormhole_child_status_okay(status)) {
+		log_error("Command \"%s\" failed: %s", argv[0], wormhole_child_status_describe(status));
+		return false;
+	}
+
+	trace("Command %s completed", argv[0]);
+	return true;
 }
 
 static inline bool
@@ -298,17 +299,13 @@ smoke_and_mirrors(const char *overlay_dir)
 int
 wormhole_digger(int argc, char **argv)
 {
-	struct wormhole_digger_config closure;
 	char *shell_argv[] = { "/bin/bash", NULL };
 
-	memset(&closure, 0, sizeof(closure));
-	if (argc != 0) {
-		closure.argv = argv;
-	} else {
+	if (argc == 0) {
 		shell_argv[0] = getenv("SHELL");
 		if (shell_argv[0] == NULL)
 			shell_argv[0] = "/bin/sh";
-		closure.argv = shell_argv;
+		argv = shell_argv;
 	}
 
 	if (opt_overlay_root == NULL) {
@@ -344,6 +341,10 @@ wormhole_digger(int argc, char **argv)
 	if (!smoke_and_mirrors(opt_overlay_root))
 		log_fatal("unable to set up transparent overlay");
 
-	wormhole_digger_setup_environment(&closure);
+	if (!wormhole_digger_build(argv))
+		log_fatal("failed to build environment");
+
+	trace("Now combine the tree\n");
+
 	return 0;
 }
