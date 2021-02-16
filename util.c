@@ -373,7 +373,7 @@ fsutil_tempdir_cleanup(struct fsutil_tempdir *td)
 	if (td->path == NULL)
 		return 0;
 
-	if (td->mounted && umount(td->path) < 0) {
+	if (td->mounted && umount2(td->path, MNT_DETACH) < 0) {
                 log_error("Unable to unmount %s: %m", td->path);
 		return -1;
         }
