@@ -100,9 +100,9 @@ wormhole_path_state_node_free(wormhole_path_state_node_t *ps)
 {
 	wormhole_path_state_node_t *child;
 
-	assert(ps->parent);
-
 	while ((child = ps->children) != NULL) {
+		assert(child->parent == ps);
+
 		ps->children = child->next;
 		child->next = NULL;
 		child->parent = NULL;
