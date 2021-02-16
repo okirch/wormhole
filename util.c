@@ -345,8 +345,12 @@ char *
 fsutil_tempdir_path(struct fsutil_tempdir *td)
 {
 	if (td->path == NULL) {
-		char dirtemplate[] = "/tmp/mounts.XXXXXX";
+		char dirtemplate[PATH_MAX];
 		char *tempdir;
+
+		if ((tempdir = getenv("TMPDIR")) == NULL)
+			tempdir = "/tmp";
+		snprintf(dirtemplate, sizeof(dirtemplate), "%s/mounts.XXXXXX", tempdir);
 
 		tempdir = mkdtemp(dirtemplate);
 		if (tempdir == NULL)
