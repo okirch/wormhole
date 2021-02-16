@@ -181,6 +181,39 @@ wormhole_fork_with_socket(int *fdp)
 	return pid;
 }
 
+bool
+wormhole_run_command_argv(char **argv, int *status_ret)
+{
+	int status;
+	pid_t pid;
+
+	if ((pid = fork()) < 0) {
+		log_error("%s: fork failed: %m", __func__);
+		return false;
+	}
+
+	if (pid == 0) {
+		const char *command = argv[0];
+
+		execvp(command, argv);
+
+		log_error("Unable to execute %s: %m", command);
+		exit(66);
+	}
+
+	while (waitpid(pid, &status, 0) < 0) {
+		if (errno != EINTR) {
+			log_error("%s: wait failed: %m", __func__);
+			return false;
+		}
+	}
+
+	if (status_ret)
+		*status_ret = status;
+
+	return true;
+}
+
 static bool
 write_single_line(const char *filename, const char *buf)
 {

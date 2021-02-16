@@ -37,6 +37,8 @@ extern void			wormhole_install_sigchild_handler(void);
 extern pid_t			wormhole_get_exited_child(int *status);
 extern bool			wormhole_child_status_okay(int status);
 extern const char *		wormhole_child_status_describe(int status);
+extern bool			wormhole_run_command_argv(char **argv, int *status_ret);
+
 extern bool			wormhole_create_namespace(void);
 extern bool			wormhole_create_user_namespace(void);
 
