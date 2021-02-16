@@ -96,6 +96,19 @@ wormhole_const_basename(const char *path)
 	return &s[1];
 }
 
+bool
+strutil_string_in_list(const char *needle, const char **haystack)
+{
+	const char *straw;
+
+	while ((straw = *haystack++) != NULL) {
+		if (!strcmp(needle, straw))
+			return true;
+	}
+	return false;
+}
+
+
 static const char *
 wormhole_find_command(const char *argv0)
 {

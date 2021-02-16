@@ -87,18 +87,6 @@ main(int argc, char **argv)
 	return wormhole_auto_profile(opt_overlay_root);
 }
 
-static bool
-__name_in_list(const char *name, const char **list)
-{
-	const char *s;
-
-	while ((s = *list++) != NULL) {
-		if (!strcmp(s, name))
-			return true;
-	}
-	return false;
-}
-
 struct dir_entry {
 	struct dir_entry *	next;
 	char *			name;
@@ -416,7 +404,7 @@ __selectively_remove_callback(const char *dir_path, const struct dirent *d, void
 {
 	const char **list = closure;
 
-	if (!__name_in_list(d->d_name, list)) {
+	if (!strutil_string_in_list(d->d_name, list)) {
 		log_error("Unexpected file %s/%s", dir_path, d->d_name);
 		return false;
 	}
@@ -498,12 +486,12 @@ check_etc_visitor(const char *dir_path, const struct dirent *d, void *closure)
 	if (__is_empty_dir(entry_path))
 		return true;
 
-	if (__name_in_list(d->d_name, ignore_dirs)) {
+	if (strutil_string_in_list(d->d_name, ignore_dirs)) {
 		__remove(entry_path, DT_DIR);
 		return true;
 	}
 
-	if (__name_in_list(d->d_name, overlay_dirs)) {
+	if (strutil_string_in_list(d->d_name, overlay_dirs)) {
 		dir_tree_add_pathinfo(tree, __make_path("/etc", d->d_name), WORMHOLE_PATH_TYPE_OVERLAY);
 		return true;
 	}
@@ -616,7 +604,7 @@ __check_toplevel_dir_callback(const char *dir_path, const struct dirent *d, void
 {
 	struct dir_tree *tree = closure;
 
-	if (__name_in_list(d->d_name, (const char **) tree->inspected))
+	if (strutil_string_in_list(d->d_name, (const char **) tree->inspected))
 		return true;
 
 	log_error("%s contains unexpected top-level file or directory \"%s\"", dir_path, d->d_name);

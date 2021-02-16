@@ -151,18 +151,6 @@ __init_working_dir3(const char *parent_dir, const char *middle, const char *name
 }
 
 static bool
-__string_in_list(const char *needle, const char **haystack)
-{
-	const char *straw;
-
-	while ((straw = *haystack++) != NULL) {
-		if (!strcmp(needle, straw))
-			return true;
-	}
-	return false;
-}
-
-static bool
 remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, const char *root_dir)
 {
 	/* We should use a better heuristic to identify these types of file systems. */
@@ -211,7 +199,7 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 
 		fstype = ps->system_mount.type;
 
-		if (__string_in_list(fstype, virtual_filesystems)) {
+		if (strutil_string_in_list(fstype, virtual_filesystems)) {
 			char dest_dir[PATH_MAX];
 
 			trace("Trying to bind mount virtual FS %s (type %s)", mount_point, fstype);
@@ -221,7 +209,7 @@ remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, co
 				return false;
 			}
 			wormhole_tree_walk_skip_children(walk);
-		} else if (__string_in_list(fstype, no_overlay_filesystems)) {
+		} else if (strutil_string_in_list(fstype, no_overlay_filesystems)) {
 			trace("Ignoring %s, file system type %s does not support overlays", mount_point, fstype);
 		} else if (fsutil_check_path_prefix(overlay_dir, mount_point)) {
 			trace("Ignoring %s, because it's a parent directory of our overlay directory", mount_point);
