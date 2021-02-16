@@ -47,21 +47,32 @@ struct wormhole_path_state_node {
 };
 
 static void
-wormhole_path_state_set_upperdir(wormhole_path_state_t *state, const char *path)
+__set_string(char **var, const char *value)
 {
-	if (state->upperdir) {
-		free(state->upperdir);
-		state->upperdir = NULL;
+	if (*var) {
+		free(*var);
+		*var = NULL;
 	}
 
-	if (path)
-		state->upperdir = strdup(path);
+	if (value)
+		*var = strdup(value);
+}
+
+static inline void
+wormhole_path_state_set_upperdir(wormhole_path_state_t *state, const char *path)
+{
+	__set_string(&state->overlay.upperdir, path);
 }
 
 static void
 wormhole_path_state_clear(wormhole_path_state_t *state)
 {
-	wormhole_path_state_set_upperdir(state, NULL);
+	switch (state->state) {
+	case WORMHOLE_PATH_STATE_OVERLAY_MOUNTED:
+	case WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED:
+		__set_string(&state->overlay.upperdir, NULL);
+		break;
+	}
 }
 
 static wormhole_path_state_node_t *
@@ -166,35 +177,43 @@ wormhole_path_tree_get(wormhole_tree_state_t *tree, const char *path)
 	return &ps->state;
 }
 
-static inline void
-__wormhole_tree_state_set(wormhole_tree_state_t *tree, const char *path, int new_state, const char *upperdir)
+static inline wormhole_path_state_node_t *
+__wormhole_tree_state_set(wormhole_tree_state_t *tree, const char *path, int new_state)
 {
 	wormhole_path_state_node_t *ps;
 
 	ps = wormhole_path_state_node_lookup(tree, path, true);
 	assert(ps);
 
-	wormhole_path_state_set_upperdir(&ps->state, upperdir);
+	wormhole_path_state_clear(&ps->state);
+
 	ps->state.state = new_state;
+	return ps;
 }
 
 void
 wormhole_tree_state_set_bind_mounted(wormhole_tree_state_t *tree, const char *path)
 {
 	trace2("path state bind_mounted at %s", path);
-	__wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_BIND_MOUNTED, NULL);
+	__wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_BIND_MOUNTED);
 }
 
 void
 wormhole_tree_state_set_overlay_mounted(wormhole_tree_state_t *tree, const char *path, const char *upperdir)
 {
+	wormhole_path_state_node_t *ps;
+
 	trace("path state overlay_mounted at %s: upper=%s", path, upperdir);
-	__wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_OVERLAY_MOUNTED, upperdir);
+	ps = __wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_OVERLAY_MOUNTED);
+	wormhole_path_state_set_upperdir(&ps->state, upperdir);
 }
 
 void
 wormhole_tree_state_set_fake_overlay_mounted(wormhole_tree_state_t *tree, const char *path, const char *upperdir)
 {
+	wormhole_path_state_node_t *ps;
+
 	trace("path state fake_overlay_mounted at %s: upper=%s", path, upperdir);
-	__wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED, upperdir);
+	ps = __wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED);
+	wormhole_path_state_set_upperdir(&ps->state, upperdir);
 }

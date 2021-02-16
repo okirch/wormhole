@@ -51,7 +51,11 @@ typedef struct wormhole_path_state_node wormhole_path_state_node_t;
 
 typedef struct wormhole_path_state {
 	int			state;
-	char *			upperdir;
+	union {
+		struct {
+			char *	upperdir;
+		} overlay;
+	};
 } wormhole_path_state_t;
 
 #define WORMHOLE_ENVIRONMENT_LAYER_MAX	8
