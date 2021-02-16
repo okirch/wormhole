@@ -376,7 +376,7 @@ pathinfo_type_string(int type)
 static bool
 _pathinfo_bind_one(wormhole_environment_t *environment, const char *source, const char *target)
 {
-	if (!fsutil_mount_bind(source, target))
+	if (!fsutil_mount_bind(source, target, false))
 		return false;
 
 	wormhole_tree_state_set_bind_mounted(environment->tree_state, target);

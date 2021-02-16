@@ -527,9 +527,14 @@ fsutil_mount_overlay(const char *lowerdir, const char *upperdir, const char *wor
 }
 
 bool
-fsutil_mount_bind(const char *source, const char *target)
+fsutil_mount_bind(const char *source, const char *target, bool recursive)
 {
-	if (mount(source, target, NULL, MS_BIND, NULL) < 0) {
+	int flags = MS_BIND;
+
+	if (recursive)
+		flags |= MS_REC;
+
+	if (mount(source, target, NULL, flags, NULL) < 0) {
 		log_error("Unable to bind mount %s to %s: %m", source, target);
 		return false;
 	}

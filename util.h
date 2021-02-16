@@ -53,7 +53,8 @@ extern bool			fsutil_mount_overlay(const char *lowerdir,
 					const char *workdir,
 					const char *target);
 extern bool			fsutil_mount_tmpfs(const char *where);
-extern bool			fsutil_mount_bind(const char *source, const char *target);
+extern bool			fsutil_mount_bind(const char *source,
+					const char *target, bool recursive);
 
 enum {
 	FSUTIL_MISMATCH_TYPE = -2,
