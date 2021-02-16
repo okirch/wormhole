@@ -41,6 +41,8 @@
 
 
 struct wormhole_tree_state {
+	char *				root_dir;
+
 	wormhole_path_state_node_t *	root;
 };
 
@@ -269,7 +271,20 @@ void
 wormhole_tree_state_free(wormhole_tree_state_t *tree)
 {
 	wormhole_path_state_node_free(tree->root);
+	__set_string(&tree->root_dir, NULL);
 	free(tree);
+}
+
+void
+wormhole_tree_state_set_root(wormhole_tree_state_t *tree, const char *root_dir)
+{
+	__set_string(&tree->root_dir, root_dir);
+}
+
+const char *
+wormhole_tree_state_get_root(wormhole_tree_state_t *tree)
+{
+	return tree->root_dir;
 }
 
 const wormhole_path_state_t *

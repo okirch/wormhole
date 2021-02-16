@@ -98,6 +98,8 @@ extern void			wormhole_environment_set_fd(wormhole_environment_t *env, int fd);
 
 extern wormhole_tree_state_t *	wormhole_tree_state_new(void);
 extern void			wormhole_tree_state_free(wormhole_tree_state_t *tree);
+extern void			wormhole_tree_state_set_root(wormhole_tree_state_t *tree, const char *root_dir);
+extern const char *		wormhole_tree_state_get_root(wormhole_tree_state_t *tree);
 extern const wormhole_path_state_t *wormhole_path_tree_get(wormhole_tree_state_t *tree, const char *path);
 extern void			wormhole_tree_state_set_system_mount(wormhole_tree_state_t *, const char *path, const char *type, const char *device);
 extern void			wormhole_tree_state_set_bind_mounted(wormhole_tree_state_t *, const char *path);
