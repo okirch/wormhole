@@ -22,6 +22,7 @@
 #include <sys/wait.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -29,6 +30,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <errno.h>
 
 #include "tracing.h"
@@ -94,6 +96,15 @@ wormhole_const_basename(const char *path)
 		return NULL;
 
 	return &s[1];
+}
+
+const char *
+pathutil_dirname(const char *path)
+{
+	static char buffer[PATH_MAX];
+
+	strncpy(buffer, path, sizeof(buffer));
+	return dirname(buffer);
 }
 
 bool
@@ -487,6 +498,38 @@ fsutil_makedirs(const char *path, int mode)
 		return false;
 
 	return true;
+}
+
+bool
+fsutil_dir_exists(const char *path)
+{
+	struct stat stb;
+
+	if (lstat(path, &stb) < 0)
+		return false;
+
+	return !!S_ISDIR(stb.st_mode);
+}
+
+bool
+fsutil_dir_is_empty(const char *path)
+{
+	bool empty = true;
+	DIR *dir;
+	struct dirent *de;
+
+	if ((dir = opendir(path)) == NULL)
+		return false;
+
+	while ((de = readdir(dir)) != NULL) {
+		if (strcmp(de->d_name, ".") && strcmp(de->d_name, "..")) {
+			empty = false;
+			break;
+		}
+	}
+
+	closedir(dir);
+	return empty;
 }
 
 bool

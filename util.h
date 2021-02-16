@@ -32,6 +32,7 @@ struct fsutil_tempdir {
 extern const char *		wormhole_const_basename(const char *path);
 extern const char *		wormhole_concat_argv(int argc, char **argv);
 extern char *			wormhole_command_path(const char *argv0);
+extern const char *		pathutil_dirname(const char *path);
 extern pid_t			wormhole_fork_with_socket(int *fdp);
 extern void			wormhole_install_sigchild_handler(void);
 extern pid_t			wormhole_get_exited_child(int *status);
@@ -49,6 +50,8 @@ extern int			fsutil_tempdir_cleanup(struct fsutil_tempdir *td);
 extern bool			fsutil_makedirs(const char *path, int mode);
 extern bool			fsutil_create_empty(const char *path);
 extern bool			fsutil_check_path_prefix(const char *path, const char *potential_prefix);
+extern bool			fsutil_dir_exists(const char *path);
+extern bool			fsutil_dir_is_empty(const char *path);
 
 extern bool			fsutil_mount_overlay(const char *lowerdir,
 					const char *upperdir,
