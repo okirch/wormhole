@@ -36,7 +36,7 @@ __wormhole_common_load_config(const char *config_path, bool must_exist)
 {
 	struct wormhole_config *config;
 
-	if (access(config_path, X_OK) != 0) {
+	if (access(config_path, R_OK) != 0) {
 		if (must_exist)
 			log_fatal("Configuration file %s does not exist", config_path);
 		return;
