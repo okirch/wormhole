@@ -112,6 +112,9 @@ wormhole_digger_build(char **argv, const char *root_dir)
 
 	setenv("PS1", "(wormhole) # ", 1);
 
+	/* FIXME: should we put all our subprocess into a cgroup that we can kill
+	 * once we're done? */
+
 	/* Caveat:
 	 * There's a glitch in devpts that causes isatty() to fail inside the container,
 	 * at least for pty slaves that were opened outside the environment.
@@ -367,6 +370,7 @@ clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 	wormhole_tree_walker_t *walk;
 	wormhole_path_state_t *state;
 	const char *mount_point;
+	const char *root_dir;
 
 	walk = wormhole_tree_walk(assembled_tree);
 	while ((state = wormhole_tree_walk_next(walk, &mount_point)) != NULL) {
@@ -387,6 +391,10 @@ clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 
 	if (!remove_subdir(overlay_root, "work")
 	 || !remove_subdir(overlay_root, "lower"))
+		return false;
+
+	root_dir = wormhole_tree_state_get_root(assembled_tree);
+	if (root_dir && !fsutil_remove_recursively(root_dir))
 		return false;
 
 	return true;
@@ -455,6 +463,11 @@ wormhole_digger(int argc, char **argv)
 	root_dir = wormhole_tree_state_get_root(assembled_tree);
 	if (!wormhole_digger_build(argv, root_dir))
 		log_fatal("failed to build environment");
+
+	if (!fsutil_lazy_umount(root_dir)) {
+		log_error("Unable to detach filesystem tree");
+		return false;
+	}
 
 	trace("Now combine the tree\n");
 	if (!combine_tree(opt_overlay_root, assembled_tree))
