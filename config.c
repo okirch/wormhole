@@ -158,25 +158,25 @@ wormhole_profile_config_free(struct wormhole_profile_config *profile)
 static struct wormhole_layer_config *
 wormhole_layer_config_new(struct wormhole_environment_config *env)
 {
-	struct wormhole_layer_config **pos, *overlay;
+	struct wormhole_layer_config **pos, *layer;
 
-	for (pos = &env->overlays; (overlay = *pos) != NULL; pos = &overlay->next)
+	for (pos = &env->overlays; (layer = *pos) != NULL; pos = &layer->next)
 		;
 
-	*pos = overlay = calloc(1, sizeof(*overlay));
-	return overlay;
+	*pos = layer = calloc(1, sizeof(*layer));
+	return layer;
 }
 
 static void
-wormhole_layer_config_free(struct wormhole_layer_config *overlay)
+wormhole_layer_config_free(struct wormhole_layer_config *layer)
 {
 	wormhole_path_info_t *pi;
 	unsigned int i;
 
-	set_string(&overlay->directory, NULL);
-	set_string(&overlay->image, NULL);
+	set_string(&layer->directory, NULL);
+	set_string(&layer->image, NULL);
 
-	for (i = 0, pi = overlay->path; i < overlay->npaths; ++i, ++pi) {
+	for (i = 0, pi = layer->path; i < layer->npaths; ++i, ++pi) {
 		set_string(&pi->path, NULL);
 	}
 }
@@ -213,14 +213,14 @@ wormhole_environment_config_new(struct wormhole_config *cfg, const char *name, s
 static void
 wormhole_environment_config_free(struct wormhole_environment_config *env)
 {
-	struct wormhole_layer_config *overlay;
+	struct wormhole_layer_config *layer;
 
 	set_string(&env->name, NULL);
 
 	/* free all overlays */
-	while ((overlay = env->overlays) != NULL) {
-		env->overlays = overlay->next;
-		wormhole_layer_config_free(overlay);
+	while ((layer = env->overlays) != NULL) {
+		env->overlays = layer->next;
+		wormhole_layer_config_free(layer);
 	}
 
 	free(env);
@@ -456,16 +456,16 @@ wormhole_config_process_profile(struct wormhole_config *cfg, struct parser_state
  * overlay path directive
  */
 static bool
-__wormhole_config_overlay_add_path(struct wormhole_layer_config *overlay, const char *kwd, int type, struct parser_state *ps)
+__wormhole_config_layer_add_path(struct wormhole_layer_config *layer, const char *kwd, int type, struct parser_state *ps)
 {
 	wormhole_path_info_t *pi;
 
-	if (overlay->npaths >= WORMHOLE_OVERLAY_PATH_MAX) {
-		parser_error(ps, "too many paths in overlay");
+	if (layer->npaths >= WORMHOLE_OVERLAY_PATH_MAX) {
+		parser_error(ps, "too many paths in layer");
 		return false;
 	}
 
-	pi = &overlay->path[overlay->npaths++];
+	pi = &layer->path[layer->npaths++];
 	pi->type = type;
 
 	if (!__wormhole_config_process_string(kwd, &pi->path, ps))
@@ -483,7 +483,7 @@ __wormhole_config_overlay_add_path(struct wormhole_layer_config *overlay, const 
  * use <feature>
  */
 static bool
-__wormhole_config_process_feature(const char *kwd, struct wormhole_layer_config *overlay, struct parser_state *ps)
+__wormhole_config_process_feature(const char *kwd, struct wormhole_layer_config *layer, struct parser_state *ps)
 {
 	char *feature = NULL;
 	bool ok = true;
@@ -492,7 +492,7 @@ __wormhole_config_process_feature(const char *kwd, struct wormhole_layer_config 
 		return false;
 
 	if (!strcmp(feature, "ldconfig")) {
-		overlay->use_ldconfig = true;
+		layer->use_ldconfig = true;
 	} else {
 		parser_error(ps, "%s: unknown feature \"%s\"", kwd, feature);
 		ok = false;
@@ -508,24 +508,24 @@ __wormhole_config_process_feature(const char *kwd, struct wormhole_layer_config 
 static bool
 __wormhole_config_overlay_directive(void *block_obj, const char *kwd, struct parser_state *ps)
 {
-	struct wormhole_layer_config *overlay = block_obj;
+	struct wormhole_layer_config *layer = block_obj;
 	
 	if (!strcmp(kwd, "directory"))
-		return __wormhole_config_process_string(kwd, &overlay->directory, ps);
+		return __wormhole_config_process_string(kwd, &layer->directory, ps);
 	if (!strcmp(kwd, "image"))
-		return __wormhole_config_process_string(kwd, &overlay->image, ps);
+		return __wormhole_config_process_string(kwd, &layer->image, ps);
 	if (!strcmp(kwd, "use"))
-		return __wormhole_config_process_feature(kwd, overlay, ps);
+		return __wormhole_config_process_feature(kwd, layer, ps);
 	if (!strcmp(kwd, "bind"))
-		return __wormhole_config_overlay_add_path(overlay, kwd, WORMHOLE_PATH_TYPE_BIND, ps);
+		return __wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_BIND, ps);
 	if (!strcmp(kwd, "bind-children"))
-		return __wormhole_config_overlay_add_path(overlay, kwd, WORMHOLE_PATH_TYPE_BIND_CHILDREN, ps);
+		return __wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_BIND_CHILDREN, ps);
 	if (!strcmp(kwd, "overlay"))
-		return __wormhole_config_overlay_add_path(overlay, kwd, WORMHOLE_PATH_TYPE_OVERLAY, ps);
+		return __wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_OVERLAY, ps);
 	if (!strcmp(kwd, "overlay-children"))
-		return __wormhole_config_overlay_add_path(overlay, kwd, WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN, ps);
+		return __wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN, ps);
 	if (!strcmp(kwd, "wormhole"))
-		return __wormhole_config_overlay_add_path(overlay, kwd, WORMHOLE_PATH_TYPE_WORMHOLE, ps);
+		return __wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_WORMHOLE, ps);
 
 	parser_error(ps, "unexpected keyword \"%s\" in overlay block", kwd);
 	return false;
