@@ -327,7 +327,7 @@ combine_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 
 		delta_dir = state->overlay.upperdir;
 
-		if (!fsutil_dir_exists(delta_dir)) {
+		if (!fsutil_isdir(delta_dir)) {
 			trace("Ignoring subtree for %s - %s is not a directory", mount_point, delta_dir);
 			continue;
 		}
@@ -419,7 +419,7 @@ wormhole_digger(int argc, char **argv)
 		return false;
 	}
 
-	if (fsutil_dir_exists(opt_overlay_root)) {
+	if (fsutil_isdir(opt_overlay_root)) {
 		if (!opt_clean) {
 			log_error("Directory %s already exists. Please remove, or invoke me with --clean.", opt_overlay_root);
 			return false;

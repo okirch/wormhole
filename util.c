@@ -501,7 +501,7 @@ fsutil_makedirs(const char *path, int mode)
 }
 
 bool
-fsutil_dir_exists(const char *path)
+fsutil_isdir(const char *path)
 {
 	struct stat stb;
 
