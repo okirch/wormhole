@@ -280,6 +280,9 @@ smoke_and_mirrors(const char *overlay_dir)
 	if (!fsutil_mount_overlay(lower_dir, upper_dir, work_dir, root_dir))
 		return NULL;
 
+	if (!fsutil_lazy_umount(lower_dir))
+		return NULL;
+
 	assembled_tree = remount_filesystems(mnt_tree, overlay_dir, root_dir);
 	if (assembled_tree == NULL) {
 		log_error("Failed to set up file system hierarchy");
@@ -342,6 +345,62 @@ combine_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 	return true;
 }
 
+static inline bool
+__rmdir(const char *dir, const char *name)
+{
+	char namebuf[PATH_MAX];
+
+	if (name) {
+		snprintf(namebuf, sizeof(namebuf), "%s/%s", dir, name);
+		dir = namebuf;
+	}
+
+	if (rmdir(dir) < 0) {
+		if (errno == ENOENT)
+			return true;
+		log_error("Unable to remove directory %s: %m", dir);
+		return false;
+	}
+
+	return true;
+}
+
+static bool
+clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
+{
+	wormhole_tree_walker_t *walk;
+	wormhole_path_state_t *state;
+	const char *mount_point;
+
+	walk = wormhole_tree_walk(assembled_tree);
+	while ((state = wormhole_tree_walk_next(walk, &mount_point)) != NULL) {
+		const char *subtree;
+
+		if (state->state != WORMHOLE_PATH_STATE_OVERLAY_MOUNTED)
+			continue;
+
+		subtree = pathutil_dirname(state->overlay.upperdir);
+
+		trace("Remove %s", subtree);
+		if (!__rmdir(subtree, "tree")
+		 || !__rmdir(subtree, "work/work")
+		 || !__rmdir(subtree, "work")
+		 || !__rmdir(subtree, NULL))
+			return false;
+
+		wormhole_tree_state_clear(assembled_tree, mount_point);
+	}
+
+	wormhole_tree_walk_end(walk);
+
+	if (!__rmdir(overlay_root, "work/work")
+	 || !__rmdir(overlay_root, "work")
+	 || !__rmdir(overlay_root, "lower"))
+		return false;
+
+	return true;
+}
+
 int
 wormhole_digger(int argc, char **argv)
 {
@@ -397,6 +456,9 @@ wormhole_digger(int argc, char **argv)
 	trace("Now combine the tree\n");
 	if (!combine_tree(opt_overlay_root, assembled_tree))
 		log_fatal("failed to combine subtrees");
+
+	if (!clean_tree(opt_overlay_root, assembled_tree))
+		log_fatal("Error during cleanup");
 
 	return 0;
 }

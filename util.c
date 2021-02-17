@@ -651,6 +651,18 @@ fsutil_mount_tmpfs(const char *where)
 }
 
 bool
+fsutil_lazy_umount(const char *path)
+{
+	trace("Unmounting %s\n", path);
+	if (umount2(path, MNT_DETACH) < 0) {
+                log_error("Unable to unmount %s: %m", path);
+		return false;
+	}
+
+	return true;
+}
+
+bool
 fsutil_make_fs_private(const char *dir)
 {
 	if (mount("none", dir, NULL, MS_REC|MS_PRIVATE, NULL) == -1) {
