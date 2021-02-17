@@ -22,6 +22,7 @@
 #define _WORMHOLE_UTIL_H
 
 #include <sys/types.h>
+#include <dirent.h>
 
 struct fsutil_tempdir {
 	char *		path;
@@ -52,6 +53,14 @@ extern bool			fsutil_create_empty(const char *path);
 extern bool			fsutil_check_path_prefix(const char *path, const char *potential_prefix);
 extern bool			fsutil_dir_exists(const char *path);
 extern bool			fsutil_dir_is_empty(const char *path);
+extern bool			fsutil_remove_recursively(const char *dir_path);
+
+#define FSUTIL_FTW_IGNORE_OPEN_ERROR	0x0001
+#define FSUTIL_FTW_DEPTH_FIRST		0x0002
+#define FSUTIL_FTW_ONE_FILESYSTEM	0x0004
+
+typedef bool			fsutil_ftw_cb_fn_t(const char *dir_path, int dir_fd, const struct dirent *d, void *closure);
+extern bool			fsutil_ftw(const char *dir_path, fsutil_ftw_cb_fn_t *callback, void *closure, int flags);
 
 extern bool			fsutil_mount_overlay(const char *lowerdir,
 					const char *upperdir,

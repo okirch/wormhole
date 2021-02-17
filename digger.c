@@ -346,23 +346,12 @@ combine_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 }
 
 static inline bool
-__rmdir(const char *dir, const char *name)
+remove_subdir(const char *dir, const char *name)
 {
 	char namebuf[PATH_MAX];
 
-	if (name) {
-		snprintf(namebuf, sizeof(namebuf), "%s/%s", dir, name);
-		dir = namebuf;
-	}
-
-	if (rmdir(dir) < 0) {
-		if (errno == ENOENT)
-			return true;
-		log_error("Unable to remove directory %s: %m", dir);
-		return false;
-	}
-
-	return true;
+	snprintf(namebuf, sizeof(namebuf), "%s/%s", dir, name);
+	return fsutil_remove_recursively(namebuf);
 }
 
 static bool
@@ -381,11 +370,7 @@ clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 
 		subtree = pathutil_dirname(state->overlay.upperdir);
 
-		trace("Remove %s", subtree);
-		if (!__rmdir(subtree, "tree")
-		 || !__rmdir(subtree, "work/work")
-		 || !__rmdir(subtree, "work")
-		 || !__rmdir(subtree, NULL))
+		if (!fsutil_remove_recursively(subtree))
 			return false;
 
 		wormhole_tree_state_clear(assembled_tree, mount_point);
@@ -393,9 +378,8 @@ clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 
 	wormhole_tree_walk_end(walk);
 
-	if (!__rmdir(overlay_root, "work/work")
-	 || !__rmdir(overlay_root, "work")
-	 || !__rmdir(overlay_root, "lower"))
+	if (!remove_subdir(overlay_root, "work")
+	 || !remove_subdir(overlay_root, "lower"))
 		return false;
 
 	return true;

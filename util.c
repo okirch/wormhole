@@ -532,6 +532,175 @@ fsutil_dir_is_empty(const char *path)
 	return empty;
 }
 
+static bool
+__fsutil_ftw(const char *dir_path, int dirfd, struct stat *dir_stat, fsutil_ftw_cb_fn_t *callback, void *closure, int flags)
+{
+	DIR *dir;
+	struct dirent *d;
+	bool ok = true;
+
+	/* trace3("%s(%s)", __func__, dir_path); */
+
+	dir = fdopendir(dup(dirfd));
+	if (dir == NULL) {
+		log_error("cannot dup directory fd: %m");
+		close(dirfd);
+		return false;
+	}
+
+	// __make_path_push();
+	while (ok && (d = readdir(dir)) != NULL) {
+		if (d->d_name[0] == '.' && (d->d_name[1] == '\0' || d->d_name[1] == '.'))
+			continue;
+
+		if (d->d_type == DT_DIR) {
+			struct stat child_stb, *child_stat = NULL;
+			char child_path[PATH_MAX];
+			int childfd;
+
+			if (flags & FSUTIL_FTW_ONE_FILESYSTEM) {
+				if (fstatat(dirfd, d->d_name, &child_stb, AT_NO_AUTOMOUNT | AT_SYMLINK_NOFOLLOW) < 0) {
+					log_error("can't stat %s/%s: %m", dir_path, d->d_name);
+					ok = false;
+					continue;
+				}
+
+				if (child_stb.st_dev != dir_stat->st_dev) {
+					trace("Skipping %s/%s: different filesystem", dir_path, d->d_name);
+					continue;
+				}
+
+				child_stat = &child_stb;
+			}
+
+			childfd = openat(dirfd, d->d_name, O_RDONLY|O_NOCTTY|O_NONBLOCK|O_NOFOLLOW|O_DIRECTORY);
+			if (childfd < 0) {
+				if (!(flags & FSUTIL_FTW_IGNORE_OPEN_ERROR)) {
+					log_error("can't open %s/%s: %m", dir_path, d->d_name);
+					ok = false;
+				}
+				continue;
+			}
+
+			snprintf(child_path, sizeof(child_path), "%s/%s", dir_path, d->d_name);
+
+			if (flags & FSUTIL_FTW_DEPTH_FIRST) {
+				ok = __fsutil_ftw(child_path, childfd, child_stat, callback, closure, flags)
+				  && callback(dir_path, dirfd, d, closure);
+			} else {
+				ok = callback(dir_path, dirfd, d, closure)
+				  && __fsutil_ftw(child_path, childfd, child_stat, callback, closure, flags);
+			}
+
+			close(childfd);
+		} else {
+			ok = callback(dir_path, dirfd, d, closure);
+		}
+	}
+	// __make_path_pop();
+
+	closedir(dir);
+	return ok;
+}
+
+
+bool
+fsutil_ftw(const char *dir_path, fsutil_ftw_cb_fn_t *callback, void *closure, int flags)
+{
+	struct stat stb, *dir_stat = NULL;
+	int dirfd;
+	bool ok = true;
+
+	trace2("%s(%s)", __func__, dir_path);
+
+	dirfd = open(dir_path, O_RDONLY|O_NOCTTY|O_NONBLOCK|O_NOFOLLOW|O_DIRECTORY);
+	if (dirfd < 0) {
+		if (flags & FSUTIL_FTW_IGNORE_OPEN_ERROR)
+			return true;
+
+		log_error("unable to open dir %s: %m", dir_path);
+		return false;
+	}
+
+	if (flags & FSUTIL_FTW_ONE_FILESYSTEM) {
+		if (fstat(dirfd, &stb) < 0) {
+			log_error("unable to stat %s: %m", dir_path);
+			ok = false;
+			goto out;
+		}
+		dir_stat = &stb;
+	}
+
+	ok = __fsutil_ftw(dir_path, dirfd, dir_stat, callback, closure, flags);
+
+out:
+	close(dirfd);
+	return ok;
+}
+
+/*
+ * Recursively remove directory hierarchy
+ */
+static bool
+__fsutil_remove_callback(const char *dir_path, int dir_fd, const struct dirent *d, void *dummy_closure)
+{
+	int flags = 0;
+
+	if (d->d_type == DT_DIR)
+		flags = AT_REMOVEDIR;
+
+	if (unlinkat(dir_fd, d->d_name, flags) < 0) {
+		log_error("Cannot remove %s/%s: %m", dir_path, d->d_name);
+		return false;
+	}
+
+	return true;
+}
+
+bool
+fsutil_remove_recursively(const char *dir_path)
+{
+	struct stat stb;
+	int dirfd;
+	bool ok = true;
+
+	trace2("%s(%s)", __func__, dir_path);
+
+	if (stat(dir_path, &stb) < 0) {
+		if (errno == ENOENT)
+			return true;
+		log_error("%s: cannot stat %s: %m", __func__, dir_path);
+		return false;
+	}
+
+	if (!S_ISDIR(stb.st_mode)) {
+		if (unlink(dir_path) < 0) {
+			log_error("Cannot remove %s: %m", dir_path);
+			return false;
+		}
+
+		return true;
+	}
+
+	dirfd = open(dir_path, O_RDONLY|O_NOCTTY|O_NONBLOCK|O_NOFOLLOW|O_DIRECTORY);
+	if (dirfd < 0) {
+		log_error("unable to open dir %s: %m", dir_path);
+		return false;
+	}
+
+	ok = __fsutil_ftw(dir_path, dirfd, &stb, __fsutil_remove_callback, NULL,
+			FSUTIL_FTW_ONE_FILESYSTEM | FSUTIL_FTW_DEPTH_FIRST);
+
+	close(dirfd);
+
+	if (ok && rmdir(dir_path) < 0) {
+		log_error("Cannot remove %s: %m", dir_path);
+		ok = false;
+	}
+
+	return ok;
+}
+
 bool
 fsutil_create_empty(const char *path)
 {
