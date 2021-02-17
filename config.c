@@ -168,7 +168,7 @@ wormhole_layer_config_new(struct wormhole_environment_config *env)
 }
 
 static void
-wormhole_layer_config_free(struct wormhole_overlay_config *overlay)
+wormhole_layer_config_free(struct wormhole_layer_config *overlay)
 {
 	wormhole_path_info_t *pi;
 	unsigned int i;
