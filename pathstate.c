@@ -314,6 +314,13 @@ __wormhole_tree_state_set(wormhole_tree_state_t *tree, const char *path, int new
 }
 
 void
+wormhole_tree_state_clear(wormhole_tree_state_t *tree, const char *path)
+{
+	/* trace2("path state unchanged at %s", path); */
+	__wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_UNCHANGED);
+}
+
+void
 wormhole_tree_state_set_system_mount(wormhole_tree_state_t *tree, const char *path, const char *type, const char *device)
 {
 	wormhole_path_state_node_t *ps;
