@@ -53,6 +53,7 @@ extern bool			fsutil_create_empty(const char *path);
 extern bool			fsutil_check_path_prefix(const char *path, const char *potential_prefix);
 extern bool			fsutil_dir_exists(const char *path);
 extern bool			fsutil_dir_is_empty(const char *path);
+extern bool			fsutil_exists(const char *path);
 extern bool			fsutil_remove_recursively(const char *dir_path);
 
 #define FSUTIL_FTW_IGNORE_OPEN_ERROR	0x0001
