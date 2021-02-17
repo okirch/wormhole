@@ -155,10 +155,10 @@ wormhole_profile_config_free(struct wormhole_profile_config *profile)
 /*
  * Overlay config object
  */
-static struct wormhole_overlay_config *
-wormhole_overlay_config_new(struct wormhole_environment_config *env)
+static struct wormhole_layer_config *
+wormhole_layer_config_new(struct wormhole_environment_config *env)
 {
-	struct wormhole_overlay_config **pos, *overlay;
+	struct wormhole_layer_config **pos, *overlay;
 
 	for (pos = &env->overlays; (overlay = *pos) != NULL; pos = &overlay->next)
 		;
@@ -168,7 +168,7 @@ wormhole_overlay_config_new(struct wormhole_environment_config *env)
 }
 
 static void
-wormhole_overlay_config_free(struct wormhole_overlay_config *overlay)
+wormhole_layer_config_free(struct wormhole_overlay_config *overlay)
 {
 	wormhole_path_info_t *pi;
 	unsigned int i;
@@ -213,14 +213,14 @@ wormhole_environment_config_new(struct wormhole_config *cfg, const char *name, s
 static void
 wormhole_environment_config_free(struct wormhole_environment_config *env)
 {
-	struct wormhole_overlay_config *overlay;
+	struct wormhole_layer_config *overlay;
 
 	set_string(&env->name, NULL);
 
 	/* free all overlays */
 	while ((overlay = env->overlays) != NULL) {
 		env->overlays = overlay->next;
-		wormhole_overlay_config_free(overlay);
+		wormhole_layer_config_free(overlay);
 	}
 
 	free(env);
@@ -456,7 +456,7 @@ wormhole_config_process_profile(struct wormhole_config *cfg, struct parser_state
  * overlay path directive
  */
 static bool
-__wormhole_config_overlay_add_path(struct wormhole_overlay_config *overlay, const char *kwd, int type, struct parser_state *ps)
+__wormhole_config_overlay_add_path(struct wormhole_layer_config *overlay, const char *kwd, int type, struct parser_state *ps)
 {
 	wormhole_path_info_t *pi;
 
@@ -483,7 +483,7 @@ __wormhole_config_overlay_add_path(struct wormhole_overlay_config *overlay, cons
  * use <feature>
  */
 static bool
-__wormhole_config_process_feature(const char *kwd, struct wormhole_overlay_config *overlay, struct parser_state *ps)
+__wormhole_config_process_feature(const char *kwd, struct wormhole_layer_config *overlay, struct parser_state *ps)
 {
 	char *feature = NULL;
 	bool ok = true;
@@ -508,7 +508,7 @@ __wormhole_config_process_feature(const char *kwd, struct wormhole_overlay_confi
 static bool
 __wormhole_config_overlay_directive(void *block_obj, const char *kwd, struct parser_state *ps)
 {
-	struct wormhole_overlay_config *overlay = block_obj;
+	struct wormhole_layer_config *overlay = block_obj;
 	
 	if (!strcmp(kwd, "directory"))
 		return __wormhole_config_process_string(kwd, &overlay->directory, ps);
@@ -540,9 +540,9 @@ __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct
 	struct wormhole_environment_config *env = block_obj;
 
 	if (!strcmp(kwd, "overlay")) {
-		struct wormhole_overlay_config *overlay;
+		struct wormhole_layer_config *overlay;
 
-		overlay = wormhole_overlay_config_new(env);
+		overlay = wormhole_layer_config_new(env);
 		if (!wormhole_config_process_block(overlay, ps, __wormhole_config_overlay_directive))
 			return false;
 
@@ -555,9 +555,9 @@ __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct
 	}
 
 	if (!strcmp(kwd, "layer")) {
-		struct wormhole_overlay_config *overlay;
+		struct wormhole_layer_config *overlay;
 
-		overlay = wormhole_overlay_config_new(env);
+		overlay = wormhole_layer_config_new(env);
 		if (!__wormhole_config_process_string(kwd, &overlay->lower_layer_name, ps))
 			return false;
 
@@ -703,7 +703,7 @@ dump_config(struct wormhole_config *cfg)
 	struct wormhole_profile_config *profile;
 
 	for (env = cfg->environments; env; env = env->next) {
-		struct wormhole_overlay_config *overlay;
+		struct wormhole_layer_config *overlay;
 
 		printf("environment %s:\n", env->name);
 		for (overlay = env->overlays; overlay; overlay = overlay->next) {

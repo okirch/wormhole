@@ -74,7 +74,7 @@ struct wormhole_environment {
 	struct wormhole_environment_config *config;
 
 	unsigned int		nlayers;
-	struct wormhole_overlay_config *layer[WORMHOLE_ENVIRONMENT_LAYER_MAX];
+	struct wormhole_layer_config *layer[WORMHOLE_ENVIRONMENT_LAYER_MAX];
 
 	int			nsfd;
 	bool			failed;

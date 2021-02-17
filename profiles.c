@@ -81,7 +81,7 @@ __wormhole_environment_from_config(struct wormhole_environment_config *cfg)
 }
 
 static bool
-__wormhole_environment_add_layer(wormhole_environment_t *env, struct wormhole_overlay_config *layer)
+__wormhole_environment_add_layer(wormhole_environment_t *env, struct wormhole_layer_config *layer)
 {
 	if (env->nlayers >= WORMHOLE_ENVIRONMENT_LAYER_MAX) {
 		log_error("Environment %s requires too many layers", env->name);
@@ -95,7 +95,7 @@ __wormhole_environment_add_layer(wormhole_environment_t *env, struct wormhole_ov
 static bool
 __wormhole_environment_chase_layers(wormhole_environment_t *env, struct wormhole_environment_config *env_cfg)
 {
-	struct wormhole_overlay_config *overlay;
+	struct wormhole_layer_config *overlay;
 
 	for (overlay = env_cfg->overlays; overlay; overlay = overlay->next) {
 		/* If the overlay refers to another environment, splice its layers into our list. */
@@ -632,7 +632,7 @@ pathinfo_process(wormhole_environment_t *env, const wormhole_path_info_t *pi, co
  * Some overlays contain shared libraries. Maintain a separate ld.so.cache inside the layer.
  */
 static bool
-wormhole_overlay_ldconfig(wormhole_environment_t *env, const struct wormhole_overlay_config *overlay, const char *overlay_root)
+wormhole_overlay_ldconfig(wormhole_environment_t *env, const struct wormhole_layer_config *overlay, const char *overlay_root)
 {
 	char overlay_etc[PATH_MAX];
 	int verdict;
@@ -693,7 +693,7 @@ wormhole_overlay_ldconfig(wormhole_environment_t *env, const struct wormhole_ove
 }
 
 static bool
-wormhole_overlay_setup(wormhole_environment_t *env, const struct wormhole_overlay_config *overlay)
+wormhole_overlay_setup(wormhole_environment_t *env, const struct wormhole_layer_config *overlay)
 {
 	const char *overlay_root;
 	const wormhole_path_info_t *pi;
@@ -746,7 +746,7 @@ wormhole_environment_setup(wormhole_environment_t *env)
 	env->tree_state = wormhole_tree_state_new();
 
 	for (i = 0; i < env->nlayers; ++i) {
-		struct wormhole_overlay_config *overlay = env->layer[i];
+		struct wormhole_layer_config *overlay = env->layer[i];
 
 		if (!wormhole_overlay_setup(env, overlay))
 			return false;

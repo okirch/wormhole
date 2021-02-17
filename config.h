@@ -32,8 +32,8 @@ struct wormhole_profile_config {
 
 #define WORMHOLE_OVERLAY_PATH_MAX 128
 
-struct wormhole_overlay_config {
-	struct wormhole_overlay_config *next;
+struct wormhole_layer_config {
+	struct wormhole_layer_config *next;
 
 	char *			directory;
 	char *			image;
@@ -50,7 +50,7 @@ struct wormhole_environment_config {
 
 	char *			name;
 
-	struct wormhole_overlay_config *overlays;
+	struct wormhole_layer_config *overlays;
 };
 
 struct wormhole_config {
