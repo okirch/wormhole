@@ -38,6 +38,7 @@ enum {
 	OPT_BASE_ENVIRONMENT,
 	OPT_OVERLAY_ROOT,
 	OPT_PRIVILEGED_NAMESPACE,
+	OPT_CLEAN,
 };
 
 struct option wormhole_options[] = {
@@ -45,6 +46,7 @@ struct option wormhole_options[] = {
 	{ "base-environment",	required_argument,	NULL,	OPT_BASE_ENVIRONMENT },
 	{ "overlay-root",	required_argument,	NULL,	OPT_OVERLAY_ROOT },
 	{ "privileged-namespace", no_argument,		NULL,	OPT_PRIVILEGED_NAMESPACE },
+	{ "clean",		no_argument,		NULL,	OPT_CLEAN },
 	{ NULL }
 };
 
@@ -52,6 +54,7 @@ const char *		opt_config_path = NULL;
 const char *		opt_base_environment = NULL;
 const char *		opt_overlay_root = NULL;
 bool			opt_privileged_namespace = false;
+bool			opt_clean = false;
 
 static int		wormhole_digger(int argc, char **argv);
 
@@ -76,6 +79,10 @@ main(int argc, char **argv)
 
 		case OPT_PRIVILEGED_NAMESPACE:
 			opt_privileged_namespace = true;
+			break;
+
+		case OPT_CLEAN:
+			opt_clean = true;
 			break;
 
 		default:
@@ -402,6 +409,18 @@ wormhole_digger(int argc, char **argv)
 	if (opt_overlay_root == NULL) {
 		log_error("Please specify a root directory via --overlay-root");
 		return false;
+	}
+
+	if (fsutil_dir_exists(opt_overlay_root)) {
+		if (!opt_clean) {
+			log_error("Directory %s already exists. Please remove, or invoke me with --clean.", opt_overlay_root);
+			return false;
+		}
+
+		if (!fsutil_remove_recursively(opt_overlay_root)) {
+			log_error("Unable to clean up %s.", opt_overlay_root);
+			return false;
+		}
 	}
 
 	if (!fsutil_makedirs(opt_overlay_root, 0755))
