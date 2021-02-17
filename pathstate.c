@@ -357,6 +357,13 @@ wormhole_tree_state_set_fake_overlay_mounted(wormhole_tree_state_t *tree, const 
 	wormhole_path_state_set_upperdir(&ps->state, upperdir);
 }
 
+void
+wormhole_tree_state_set_ignore(wormhole_tree_state_t *tree, const char *path)
+{
+	trace2("path state ignored at %s", path);
+	__wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_IGNORED);
+}
+
 struct wormhole_tree_walker {
 	wormhole_tree_state_t *		tree;
 	wormhole_path_state_node_t *	pos;
