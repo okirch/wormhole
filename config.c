@@ -176,9 +176,38 @@ wormhole_layer_config_free(struct wormhole_layer_config *layer)
 	set_string(&layer->directory, NULL);
 	set_string(&layer->image, NULL);
 
-	for (i = 0, pi = layer->path; i < layer->npaths; ++i, ++pi) {
-		set_string(&pi->path, NULL);
+	if (layer->path) {
+		for (i = 0, pi = layer->path; i < layer->npaths; ++i, ++pi) {
+			set_string(&pi->path, NULL);
+		}
+
+		free(pi->path);
 	}
+}
+
+wormhole_path_info_t *
+wormhole_layer_config_add_path(struct wormhole_layer_config *layer, int type, const char *path)
+{
+	wormhole_path_info_t *pi;
+
+	if ((layer->npaths % 16) == 0) {
+		if (layer->path == NULL) {
+			layer->path = malloc(16 * sizeof(layer->path[0]));
+		} else {
+			layer->path = realloc(layer->path, (layer->npaths + 16) * sizeof(layer->path[0]));
+		}
+
+		if (layer->path == NULL)
+			log_fatal("%s: out of memory", __func__);
+	}
+
+	pi = &layer->path[layer->npaths++];
+	pi->type = type;
+
+	if (path)
+		pi->path = strdup(path);
+
+	return pi;
 }
 
 /*
@@ -460,13 +489,7 @@ __wormhole_config_layer_add_path(struct wormhole_layer_config *layer, const char
 {
 	wormhole_path_info_t *pi;
 
-	if (layer->npaths >= WORMHOLE_OVERLAY_PATH_MAX) {
-		parser_error(ps, "too many paths in layer");
-		return false;
-	}
-
-	pi = &layer->path[layer->npaths++];
-	pi->type = type;
+	pi = wormhole_layer_config_add_path(layer, type, NULL);
 
 	if (!__wormhole_config_process_string(kwd, &pi->path, ps))
 		return false;

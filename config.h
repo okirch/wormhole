@@ -30,8 +30,6 @@ struct wormhole_profile_config {
 	char *			environment;
 };
 
-#define WORMHOLE_OVERLAY_PATH_MAX 128
-
 struct wormhole_layer_config {
 	struct wormhole_layer_config *next;
 
@@ -42,7 +40,7 @@ struct wormhole_layer_config {
 	bool			use_ldconfig;
 
 	unsigned int		npaths;
-	wormhole_path_info_t	path[WORMHOLE_OVERLAY_PATH_MAX];
+	wormhole_path_info_t *	path;
 };
 
 struct wormhole_environment_config {
@@ -61,6 +59,8 @@ struct wormhole_config {
 
 extern struct wormhole_config *	wormhole_config_load(const char *filename);
 extern void			wormhole_config_free(struct wormhole_config *cfg);
+
+extern wormhole_path_info_t *	wormhole_layer_config_add_path(struct wormhole_layer_config *layer, int type, const char *path);
 
 #endif // _WORMHOLE_CONFIG_H
 
