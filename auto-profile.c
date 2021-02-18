@@ -29,10 +29,12 @@
 #include <dirent.h>
 #include <errno.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "tracing.h"
 #include "wormhole.h"
 #include "profiles.h"
+#include "config.h"
 #include "util.h"
 
 struct option wormhole_options[] = {
@@ -87,59 +89,6 @@ main(int argc, char **argv)
 	return wormhole_auto_profile(opt_overlay_root);
 }
 
-struct dir_entry {
-	struct dir_entry *	next;
-	char *			name;
-	int			type;
-	int			action;
-};
-
-#define DIR_TREE_MAX_INSPECTED	32
-
-struct dir_tree {
-	const char *		root;
-
-	unsigned int		num_inspected;
-	char *			inspected[DIR_TREE_MAX_INSPECTED];
-
-	bool			use_ldconfig;
-	struct dir_entry *	path_info;
-};
-
-static inline struct dir_entry *
-dir_entry_new(const char *name, int type, int action)
-{
-	struct dir_entry *de;
-
-	de = calloc(1, sizeof(*de));
-	if (name != NULL)
-		de->name = strdup(name);
-	de->type = type;
-	de->action = action;
-
-	return de;
-}
-
-static void
-dir_tree_record_inspected(struct dir_tree *tree, const char *name)
-{
-	assert(tree->num_inspected < DIR_TREE_MAX_INSPECTED);
-	tree->inspected[tree->num_inspected++] = strdup(name);
-}
-
-static void
-dir_tree_add_pathinfo(struct dir_tree *tree, const char *path, int action)
-{
-	struct dir_entry *de, **pos;
-
-	/* Find end of list */
-	for (pos = &tree->path_info; (de = *pos) != NULL; pos = &de->next)
-		;
-
-	de = dir_entry_new(path, -1, action);
-	*pos = de;
-}
-
 struct __make_path_state {
 	struct __make_path_state *parent;
 	char		path_buf[8][PATH_MAX];
@@ -149,7 +98,7 @@ struct __make_path_state {
 static struct __make_path_state top_state;
 static struct __make_path_state *__make_path_state = &top_state;
 
-static void
+static inline void
 __make_path_push(void)
 {
 	struct __make_path_state *s;
@@ -159,7 +108,7 @@ __make_path_push(void)
 	__make_path_state = s;
 }
 
-static void
+static inline void
 __make_path_pop(void)
 {
 	struct __make_path_state *s = __make_path_state;
@@ -185,444 +134,6 @@ __make_path(const char *root_path, const char *relative_path)
 
 	snprintf(buf, PATH_MAX, "%s/%s", root_path, relative_path);
 	return buf;
-}
-
-static const char *
-make_path(const struct dir_tree *tree, const char *relative_path)
-{
-	return __make_path(tree->root, relative_path);
-}
-
-static int
-__mode_to_dir_type(mode_t mode)
-{
-	if (S_ISREG(mode))
-		return DT_REG;
-	if (S_ISDIR(mode))
-		return DT_DIR;
-	if (S_ISCHR(mode))
-		return DT_CHR;
-	if (S_ISBLK(mode))
-		return DT_BLK;
-	if (S_ISLNK(mode))
-		return DT_LNK;
-	if (S_ISSOCK(mode))
-		return DT_SOCK;
-	if (S_ISFIFO(mode))
-		return DT_FIFO;
-
-	return DT_UNKNOWN;
-}
-
-static int
-__get_dir_type(const char *path)
-{
-	struct stat stb;
-
-	if (lstat(path, &stb) < 0)
-		return -1;
-
-	return __mode_to_dir_type(stb.st_mode);
-}
-
-static bool
-__exists(const char *path, int type)
-{
-	struct stat stb;
-
-	if (lstat(path, &stb) < 0)
-		return false;
-
-	if (type < 0)
-		return true;
-
-	return type == __mode_to_dir_type(stb.st_mode);
-}
-
-static bool
-__isdir(const char *path)
-{
-	return __exists(path, DT_DIR);
-}
-
-static inline bool
-exists(const struct dir_tree *tree, const char *relative_path, int type)
-{
-	return __exists(make_path(tree, relative_path), type);
-}
-
-typedef bool	__readdir_callback_fn_t(const char *dir_path, const struct dirent *d, void *closure);
-
-static bool
-__iterate_directory(const char *dir_path, __readdir_callback_fn_t *callback, void *closure, bool suppress_errors)
-{
-	DIR *dirfd;
-	struct dirent *d;
-	bool ok = true;
-
-	trace2("%s(%s)", __func__, dir_path);
-
-	dirfd = opendir(dir_path);
-	if (dirfd == NULL) {
-		if (!suppress_errors)
-			log_error("unable to open dir %s: %m", dir_path);
-		ok = false;
-	}
-
-	__make_path_push();
-	while (ok && (d = readdir(dirfd)) != NULL) {
-		if (d->d_name[0] == '.' && (d->d_name[1] == '\0' || d->d_name[1] == '.'))
-			continue;
-
-		ok = callback(dir_path, d, closure);
-	}
-	__make_path_pop();
-
-	closedir(dirfd);
-	return ok;
-}
-
-/*
- * __is_empty_dir returns true iff the given path refers to a directory
- * which is either empty, or only contains directories that are empty in
- * this sense.
- */
-static bool
-__is_empty_callback(const char *dir_path, const struct dirent *d, void *dummy)
-{
-	const char *path = __make_path(dir_path, d->d_name);
-	int type;
-
-	if ((type = __get_dir_type(path)) < 0) {
-		log_error("cannot stat %s: %m", path);
-		return false;
-	}
-
-	if (type != DT_DIR) {
-		trace2("  %s not empty - found %s", dir_path, d->d_name);
-		return false;
-	}
-
-	return __iterate_directory(path, __is_empty_callback, NULL, false);
-}
-
-static bool
-__is_empty_dir(const char *path)
-{
-	trace2("%s(%s)", __func__, path);
-	return __iterate_directory(path, __is_empty_callback, NULL, false);
-}
-
-static bool
-is_empty_dir(const struct dir_tree *tree, const char *relative_path)
-{
-	const char *path = make_path(tree, relative_path);
-	int type;
-
-	if ((type = __get_dir_type(path)) < 0) {
-		if (errno == ENOENT)
-			return true;
-
-		log_error("cannot stat %s: %m", path);
-		return false;
-	}
-
-	if (type != DT_DIR) {
-		log_error("%s is not a directory", path);
-		return false;
-	}
-
-	return __iterate_directory(path, __is_empty_callback, NULL, true);
-}
-
-/*
- * rm -rf
- */
-static bool	__remove_callback(const char *dir_path, const struct dirent *d, void *dummy);
-
-static bool
-__remove(const char *path, int type)
-{
-	trace2("%s(%s, %d)", __func__, path, type);
-	if (type < 0 || type == DT_UNKNOWN) {
-		type = __get_dir_type(path);
-		if (type < 0) {
-			if (errno == ENOENT)
-				return true;
-			log_error("unable to stat %s: %m", path);
-			return false;
-		}
-	}
-
-	if (type != DT_DIR) {
-		if (unlink(path) >= 0)
-			return true;
-
-		if (errno == ENOENT)
-			return true;
-	} else {
-		if (rmdir(path) >= 0)
-			return true;
-
-		if (errno == ENOENT)
-			return true;
-
-		if (errno != ENOTEMPTY)
-			return false;
-
-		if (!__iterate_directory(path, __remove_callback, NULL, false))
-			return false;
-
-		if (rmdir(path) >= 0)
-			return true;
-	}
-
-	log_error("unable to remove %s: %m", path);
-	return false;
-}
-
-static bool
-__remove_callback(const char *dir_path, const struct dirent *d, void *dummy)
-{
-	return __remove(__make_path(dir_path, d->d_name), d->d_type);
-}
-
-static bool
-check_and_remove(const struct dir_tree *tree, const char *relative_path, int type)
-{
-	const char *path = make_path(tree, relative_path);
-
-	if (!__exists(path, type))
-		return false;
-
-	__remove(path, type);
-	return true;
-}
-
-static bool
-__selectively_remove_callback(const char *dir_path, const struct dirent *d, void *closure)
-{
-	const char **list = closure;
-
-	if (!strutil_string_in_list(d->d_name, list)) {
-		log_error("Unexpected file %s/%s", dir_path, d->d_name);
-		return false;
-	}
-
-	trace("(Trying to) remove %s/%s", dir_path, d->d_name);
-	return __remove(__make_path(dir_path, d->d_name), -1);
-}
-
-static bool
-selectively_remove(const struct dir_tree *tree, const char *relative_path, const char **name_list)
-{
-	return __iterate_directory(make_path(tree, relative_path), __selectively_remove_callback, name_list, false);
-}
-
-static bool
-overlay_unless_empty(struct dir_tree *tree, const char *name)
-{
-	dir_tree_record_inspected(tree, name);
-
-	if (is_empty_dir(tree, name))
-		return true;
-
-	dir_tree_add_pathinfo(tree, __make_path("", name), WORMHOLE_PATH_TYPE_OVERLAY);
-	return true;
-}
-
-static bool
-must_be_empty(struct dir_tree *tree, const char *name)
-{
-	dir_tree_record_inspected(tree, name);
-
-	if (is_empty_dir(tree, name))
-		return true;
-
-	log_error("Directory /%s should be empty but is not", name);
-	return false;
-}
-
-/*
- * /etc is probably the directory that's most difficult to handle, as it's the
- * one place that everyone drops their config crap into.
- *
- * We need a flexible mechanism to handle these cases (and do so automatically
- * to the largest extent possible):
- *
- *  - files and directories that belong exclusively to the application that we
- *    wrap.
- *    These should be bind mounted.
- *    (should be specified on the command line)
- *  - files that should not be there, like passwd, group etc
- *    (should be an error)
- *  - subdirectories we should ignore
- *    (built-in list + command line)
- *  - subdirectories we should overlay
- *    These would usually be directories named $foo.d that are designed as
- *    a drop-in destination, like /etc/alternatives.
- *    (built-in list + command line)
- */
-static bool
-check_etc_visitor(const char *dir_path, const struct dirent *d, void *closure)
-{
-	struct dir_tree *tree = closure;
-	const char *entry_path = __make_path(dir_path, d->d_name);
-	static const char *ignore_dirs[] = {
-		"rc.d",
-		"init.d",
-		NULL,
-	};
-	static const char *overlay_dirs[] = {
-		"alternatives",
-		NULL,
-	};
-
-	if (!__isdir(entry_path)) {
-		log_error("Unexpected file /etc/%s in tree", d->d_name);
-		return false;
-	}
-
-	if (__is_empty_dir(entry_path))
-		return true;
-
-	if (strutil_string_in_list(d->d_name, ignore_dirs)) {
-		__remove(entry_path, DT_DIR);
-		return true;
-	}
-
-	if (strutil_string_in_list(d->d_name, overlay_dirs)) {
-		dir_tree_add_pathinfo(tree, __make_path("/etc", d->d_name), WORMHOLE_PATH_TYPE_OVERLAY);
-		return true;
-	}
-
-	log_error("Unexpected directory /etc/%s in tree", d->d_name);
-	return false;
-}
-
-static bool
-check_etc(struct dir_tree *tree)
-{
-	const char *path;
-	int type;
-
-	dir_tree_record_inspected(tree, "etc");
-
-	if (check_and_remove(tree, "etc/ld.so.cache", DT_REG)) {
-		tree->use_ldconfig = true;
-	}
-
-	path = make_path(tree, "etc");
-	if ((type = __get_dir_type(path)) < 0) {
-		if (errno == ENOENT)
-			return true;
-
-		log_error("cannot stat %s: %m", path);
-		return false;
-	}
-
-	if (type != DT_DIR) {
-		log_error("%s is not a directory", path);
-		return false;
-	}
-
-	if (!__iterate_directory(path, check_etc_visitor, tree, false))
-		return false;
-
-	return true;
-}
-
-/*
- * Inspect /dev
- * Maybe we should not overlay /dev to begin with...
- */
-static bool
-check_dev(struct dir_tree *tree)
-{
-	const char *ignore_devices[] = {
-		"null",
-		NULL
-	};
-	const char *path;
-	int type;
-
-	dir_tree_record_inspected(tree, "dev");
-
-	path = make_path(tree, "dev");
-	if ((type = __get_dir_type(path)) < 0) {
-		if (errno == ENOENT)
-			return true;
-
-		log_error("cannot stat %s: %m", path);
-		return false;
-	}
-
-	if (type != DT_DIR) {
-		log_error("%s is not a directory", path);
-		return false;
-	}
-
-	if (!selectively_remove(tree, "dev", ignore_devices))
-		return false;
-
-	return true;
-}
-
-/*
- * Handle /usr
- */
-static bool
-check_usr(struct dir_tree *tree)
-{
-	/* quietly remove the RPM directory */
-	(void) check_and_remove(tree, "usr/sysimage/rpm", DT_DIR);
-
-	return overlay_unless_empty(tree, "usr");
-}
-
-/*
- * Handle /var
- */
-static bool
-check_var(struct dir_tree *tree)
-{
-	/* quietly remove some transient directories */
-	(void) check_and_remove(tree, "var/cache", DT_DIR);
-	(void) check_and_remove(tree, "var/lib/zypp", DT_DIR);
-	(void) check_and_remove(tree, "var/lib/YaST2", DT_DIR);
-	(void) check_and_remove(tree, "var/log", DT_DIR);
-	(void) check_and_remove(tree, "var/run", DT_DIR);
-
-	return overlay_unless_empty(tree, "var");
-}
-
-/*
- * Scan the root of the tree for unexpected directories
- */
-bool
-__check_toplevel_dir_callback(const char *dir_path, const struct dirent *d, void *closure)
-{
-	struct dir_tree *tree = closure;
-
-	if (strutil_string_in_list(d->d_name, (const char **) tree->inspected))
-		return true;
-
-	log_error("%s contains unexpected top-level file or directory \"%s\"", dir_path, d->d_name);
-	return false;
-}
-
-static bool
-check_unknown_dirs(struct dir_tree *tree)
-{
-#if 0
-	unsigned int i;
-
-	printf("inspected so far:\n");
-	for (i = 0; i < tree->num_inspected; ++i)
-		printf("  %s\n", tree->inspected[i]);
-#endif
-
-	return __iterate_directory(tree->root, __check_toplevel_dir_callback, tree, false);
 }
 
 static const char *
@@ -653,32 +164,34 @@ pathinfo_action_to_directive(int action)
 }
 
 static bool
-dump_config(FILE *fp, struct dir_tree *tree, const char *env_name)
+dump_config(FILE *fp, const char *env_name, struct wormhole_layer_config *output)
 {
-	struct dir_entry *de;
+	unsigned int i;
 	bool ok = true;
 
 	fprintf(fp, "environment %s {\n", env_name);
 	fprintf(fp, "\toverlay {\n");
 
-	fprintf(fp, "\t\tdirectory %s\n", tree->root);
+	fprintf(fp, "\t\tdirectory %s\n", output->directory);
 	fprintf(fp, "\n");
 
-	if (tree->use_ldconfig) {
+	if (output->use_ldconfig) {
 		fprintf(fp, "\t\tuse ldconfig\n");
 		fprintf(fp, "\n");
 	}
 
-	for (de = tree->path_info; de; de = de->next) {
-		const char *action = pathinfo_action_to_directive(de->action);
+	for (i = 0; i < output->npaths; ++i) {
+		struct wormhole_path_info *pi = &output->path[i];
+
+		const char *action = pathinfo_action_to_directive(pi->type);
 
 		if (action == NULL) {
-			log_error("%s: unsupported action %d", de->name, de->action);
+			log_error("%s: unsupported action %d", pi->path, pi->type);
 			ok = false;
 			continue;
 		}
 
-		fprintf(fp, "\t\t%s %s\n", action, de->name);
+		fprintf(fp, "\t\t%s %s\n", action, pi->path);
 	}
 	fprintf(fp, "\t}\n");
 	fprintf(fp, "}\n");
@@ -686,75 +199,492 @@ dump_config(FILE *fp, struct dir_tree *tree, const char *env_name)
 	return ok;
 }
 
+static const char *
+__build_path(wormhole_tree_state_t *tree, const char *path)
+{
+	return __make_path(wormhole_tree_state_get_root(tree), path);
+}
+
+struct wormhole_layer_config *
+alloc_layer_config(const char *tree_root)
+{
+	struct wormhole_layer_config *layer;
+
+	layer = calloc(1, sizeof(*layer));
+	layer->directory = strdup(tree_root);
+	return layer;
+}
+
+struct dir_disposition {
+	bool			ignore_empty;
+	bool			ignore_empty_descendants;
+};
+
+struct dir_disposition *
+dir_info_new(bool ignore_empty, bool ignore_empty_descendants)
+{
+	struct dir_disposition *info;
+
+	info = calloc(1, sizeof(*info));
+	info->ignore_empty = ignore_empty;
+	info->ignore_empty_descendants = ignore_empty_descendants;
+
+	return info;
+}
+
+static bool
+perform_optional_directory(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	return true;
+}
+
+static bool
+perform_ignore(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	const char *path = __build_path(tree, arg);
+
+	if (fsutil_exists(path)) {
+		log_info("Actively ignoring %s", arg);
+		wormhole_tree_state_set_ignore(tree, arg);
+	}
+
+	return true;
+}
+
+static bool
+perform_ignore_if_empty(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	struct dir_disposition *dir_disposition;
+
+	/* We can't decide right away; we have to wait until we've scanned the tree.
+	 * For example, we may find a file in /etc/alternatives, but still ignore
+	 * /etc itself unless there's anything else in there.
+	 */
+	dir_disposition = dir_info_new(true, false);
+	wormhole_tree_state_set_user_data(tree, arg, dir_disposition);
+
+	return true;
+}
+
+static bool
+perform_ignore_empty_subdirs(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	struct dir_disposition *dir_disposition;
+
+	/* We can't decide right away; we have to wait until we've scanned the tree.
+	 * For example, we may find a file in /etc/alternatives, but still ignore
+	 * /etc itself unless there's anything else in there.
+	 */
+	dir_disposition = dir_info_new(true, true);
+	wormhole_tree_state_set_user_data(tree, arg, dir_disposition);
+
+	return true;
+}
+
+static bool
+perform_overlay_unless_empty(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	const char *path = __build_path(tree, arg);
+
+	if (!fsutil_isdir(path))
+		return true;
+
+	if (fsutil_dir_is_empty(path)) {
+		log_info("Ignoring empty directory %s", arg);
+		wormhole_tree_state_set_ignore(tree, arg);
+	} else {
+		log_info("Overlaying %s", arg);
+		wormhole_layer_config_add_path(output, WORMHOLE_PATH_TYPE_OVERLAY, arg);
+		wormhole_tree_state_set_overlay_mounted(tree, arg, NULL);
+	}
+
+	return true;
+}
+
+static bool
+perform_must_be_empty(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	const char *path = __build_path(tree, arg);
+
+	if (!fsutil_isdir(path))
+		return true;
+
+	if (fsutil_dir_is_empty(path)) {
+		log_info("Ignoring empty directory %s", arg);
+		wormhole_tree_state_set_ignore(tree, arg);
+	} else {
+		log_error("%s exists but is not empty. Adjust your config.", arg);
+		return false;
+	}
+
+	return true;
+}
+
+static bool
+perform_check_ldconfig(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	const char *path;
+
+	if (arg == NULL)
+		arg = "/etc/ld.so.cache";
+	path = __build_path(tree, arg);
+
+	if (fsutil_exists(path)) {
+		log_info("Found %s, configuring layer to use ldconfig", arg);
+		wormhole_tree_state_set_ignore(tree, arg);
+		output->use_ldconfig = true;
+	}
+	return true;
+}
+
+struct action {
+	struct action *	next;
+
+	unsigned int	line;
+	char *		arg;
+	bool		(*perform)(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output);
+};
+
+static struct action *
+action_new(const char *arg)
+{
+	struct action *a;
+
+	a = calloc(1, sizeof(*a));
+	if (arg)
+		a->arg = strdup(arg);
+	return a;
+}
+
+static void
+action_free(struct action *a)
+{
+	if (a->arg)
+		free(a->arg);
+	free(a);
+}
+
+struct autoprofile_config {
+	char *		filename;
+	struct action *	actions;
+};
+
+struct autoprofile_config *
+autoprofile_config_new(const char *filename)
+{
+	struct autoprofile_config *config;
+
+	config = calloc(1, sizeof(*config));
+	config->filename = strdup(filename);
+	return config;
+}
+
+void
+autoprofile_config_free(struct autoprofile_config *config)
+{
+	struct action *a;
+
+	while ((a = config->actions) != NULL) {
+		config->actions = a->next;
+		action_free(a);
+	}
+
+	if (config->filename)
+		free(config->filename);
+
+	free(config);
+}
+
+struct autoprofile_config *
+load_autoprofile_config(const char *filename)
+{
+	struct autoprofile_config *config;
+	struct action **pos;
+	FILE *fp;
+	char linebuf[1024];
+	unsigned int lineno = 0;
+
+	if (!(fp = fopen(filename, "r"))) {
+		log_error("Cannot open config file %s: %m", filename);
+		return NULL;
+	}
+
+	config = autoprofile_config_new(filename);
+	pos = &config->actions;
+
+	while ((fgets(linebuf, sizeof(linebuf), fp)) != NULL) {
+		char *s, *kwd, *arg;
+		struct action *a;
+
+		linebuf[strcspn(linebuf, "\r\n")] = '\0';
+		lineno++;
+
+		for (s = linebuf; isspace(*s); ++s)
+			;
+
+		if (*s == '#' || *s == '\0')
+			continue;
+
+		kwd = strtok(s, " \t");
+		if (!kwd)
+			continue;
+
+		arg = strtok(NULL, " \t");
+
+		a = *pos = action_new(arg);
+		pos = &a->next;
+
+		if (!strcmp(kwd, "optional-directory")) {
+			a->perform = perform_optional_directory;
+		} else
+		if (!strcmp(kwd, "overlay-unless-empty")) {
+			a->perform = perform_overlay_unless_empty;
+		} else
+		if (!strcmp(kwd, "must-be-empty")) {
+			a->perform = perform_must_be_empty;
+		} else
+		if (!strcmp(kwd, "check-ldconfig")) {
+			a->perform = perform_check_ldconfig;
+		} else
+		if (!strcmp(kwd, "ignore-if-empty")) {
+			a->perform = perform_ignore_if_empty;
+		} else
+		if (!strcmp(kwd, "ignore-empty-subdirs")) {
+			a->perform = perform_ignore_empty_subdirs;
+		} else
+		if (!strcmp(kwd, "ignore")) {
+			a->perform = perform_ignore;
+		} else {
+			log_error("%s line %u: unknown keyword \"%s\"", filename, lineno, kwd);
+			goto failed;
+		}
+
+		a->line = lineno;
+	}
+
+	fclose(fp);
+	return config;
+
+failed:
+	autoprofile_config_free(config);
+	fclose(fp);
+	return NULL;
+}
+
+static bool
+perform(struct autoprofile_config *config, wormhole_tree_state_t *tree, struct wormhole_layer_config *output)
+{
+	struct action *a;
+
+	for (a = config->actions; a; a = a->next) {
+		if (!a->perform(tree, a->arg, output)) {
+			log_error("Error when executing autoprofile statement (%s:%u)", config->filename, a->line);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+struct stray_dir_level {
+	struct stray_dir_level *parent;
+
+	struct dir_disposition	disposition;
+	unsigned int		stray_count;
+	unsigned int		stray_children;
+};
+
+struct stray_state {
+	const char *		tree_root;
+	unsigned int		tree_root_len;
+	wormhole_tree_state_t *	tree;
+
+	struct stray_dir_level *current;
+
+	unsigned int		stray_count;
+};
+
+static inline void
+__stray_count(struct stray_state *state, const char *d_path, int d_type)
+{
+	if (state->stray_count < 100)
+		log_error("Stray %s: %s", (d_type == DT_DIR)? "directory" : "file", d_path);
+	state->stray_count += 1;
+
+	state->current->stray_count += 1;
+	state->current->stray_children += 1;
+}
+
+static struct stray_dir_level *
+__stray_enter_directory(struct stray_state *state)
+{
+	struct stray_dir_level *dir;
+
+	dir = calloc(1, sizeof(*dir));
+	dir->parent = state->current;
+	state->current = dir;
+
+	/* Inherit disposition from parent */
+	if (dir->parent) {
+		struct dir_disposition *dist = &dir->parent->disposition;
+
+		if (dist->ignore_empty_descendants) {
+			dir->disposition.ignore_empty = true;
+			dir->disposition.ignore_empty_descendants = true;
+		}
+	}
+
+	return dir;
+}
+
+static struct stray_dir_level *
+__stray_leave_directory(struct stray_state *state)
+{
+	static struct stray_dir_level ret_dir;
+	struct stray_dir_level *dir = state->current;
+
+	if (dir == NULL)
+		return NULL;
+
+	state->current = dir->parent;
+	dir->parent = NULL;
+
+	/* percolate up the stray count */
+	if (state->current)
+		state->current->stray_count += dir->stray_count;
+	else
+		state->stray_count += dir->stray_count;
+
+	ret_dir = *dir;
+	free(dir);
+
+	return &ret_dir;
+}
+
+static int
+__check_for_stray_files_visitor(const char *dir_path, const struct dirent *d, int cbflags, void *closure)
+{
+	struct stray_state *state = (struct stray_state *) closure;
+	const wormhole_path_state_t *path_state;
+	const char *d_path;
+
+	d_path = __make_path(dir_path, d->d_name);
+	d_path += state->tree_root_len;
+
+	path_state = wormhole_path_tree_get(state->tree, d_path);
+
+	if (path_state && path_state->state != WORMHOLE_PATH_STATE_UNCHANGED)
+		return FTW_SKIP;
+
+	if (cbflags & FSUTIL_FTW_PRE_DESCENT) {
+		struct stray_dir_level *dir;
+
+		dir = __stray_enter_directory(state);
+		if (path_state->user_data) {
+			struct dir_disposition *disp = path_state->user_data;
+
+			/* stick it into state->current */
+			if (disp->ignore_empty)
+				dir->disposition.ignore_empty = true;
+			if (disp->ignore_empty_descendants) {
+				dir->disposition.ignore_empty = true;
+				dir->disposition.ignore_empty_descendants = true;
+			}
+		}
+		return FTW_CONTINUE;
+	}
+
+	if (d->d_type != DT_DIR) {
+		__stray_count(state, d_path, d->d_type);
+		return FTW_CONTINUE;
+	}
+
+	if (cbflags & FSUTIL_FTW_POST_DESCENT) {
+		struct stray_dir_level *dir = __stray_leave_directory(state);
+
+		if (dir->stray_count == 0 && dir->disposition.ignore_empty_descendants) {
+			log_info("Ignoring empty directory %s", d_path);
+			return FTW_CONTINUE;
+		}
+		if (dir->stray_children == 0 && dir->disposition.ignore_empty) {
+			log_info("Ignoring empty directory %s", d_path);
+			return FTW_CONTINUE;
+		}
+		log_info("%s has %u children, %u descendants total", d_path, dir->stray_children, dir->stray_count);
+	}
+
+	__stray_count(state, d_path, d->d_type);
+	return FTW_CONTINUE;
+}
+
+static bool
+check_for_stray_files(wormhole_tree_state_t *tree)
+{
+	struct stray_state state = { NULL, };
+	const char *tree_root = wormhole_tree_state_get_root(tree);
+
+	memset(&state, 0, sizeof(state));
+	state.tree_root = tree_root;
+	state.tree_root_len = strlen(tree_root);
+	state.tree = tree;
+
+	if (!fsutil_ftw(tree_root, __check_for_stray_files_visitor, &state, FSUTIL_FTW_PRE_POST_CALLBACK))
+		return false;
+
+	if (state.stray_count != 0) {
+		log_error("Found %u stray files or directories", state.stray_count);
+		return false;
+	}
+
+	return true;
+}
+
 int
 wormhole_auto_profile(const char *root_path)
 {
-	struct dir_tree	tree = {
-		.root = root_path,
-	};
+	const char *subdir;
+	const char *tree_root, *output_tree_root;
 	const char *env_name;
 	FILE *fp;
 	int retval = 0;
-	bool remove_work = false;
+	struct autoprofile_config *config;
+	wormhole_tree_state_t *real_tree;
+	struct wormhole_layer_config *output;
 
-	if (exists(&tree, "tree", DT_DIR)
-	 && exists(&tree, "work", DT_DIR)) {
-		log_info("This looks like a tree created by wormhole-digger, assuming the file system root is at %s/tree", tree.root);
+	tree_root = root_path;
+	output_tree_root = root_path;
 
-		tree.root = strdup(make_path(&tree, "tree"));
-		remove_work = true;
+	subdir = __make_path(root_path, "tree");
+	if (fsutil_isdir(subdir)) {
+		log_info("This looks like a tree created by wormhole-digger, assuming the file system root is at %s", subdir);
 
-		if (opt_output && !strcmp(opt_output, "auto"))
+		tree_root = strdup(subdir);
+
+		if (opt_output && !strcmp(opt_output, "auto")) {
 			opt_output = strdup(__make_path(root_path, "environ.conf"));
+			output_tree_root = "tree";
+		}
 	}
 
-	if (!check_etc(&tree))
-		retval = 1;
+	real_tree = wormhole_tree_state_new();
+	wormhole_tree_state_set_root(real_tree, tree_root);
 
-	if (!check_dev(&tree))
-		retval = 1;
+	config = load_autoprofile_config("autoprofile-default.conf");
+	if (config == NULL)
+		return 1;
 
-	if (!must_be_empty(&tree, "boot"))
-		retval = 1;
+	output = alloc_layer_config(output_tree_root);
 
-	if (!overlay_unless_empty(&tree, "bin"))
-		retval = 1;
+	if (!perform(config, real_tree, output))
+		return 1;
 
-	if (!overlay_unless_empty(&tree, "sbin"))
-		retval = 1;
-
-	if (!overlay_unless_empty(&tree, "lib"))
-		retval = 1;
-
-	if (!overlay_unless_empty(&tree, "lib64"))
-		retval = 1;
-
-	if (!overlay_unless_empty(&tree, "opt"))
-		retval = 1;
-
-	if (!check_usr(&tree))
-		retval = 1;
-
-	if (!check_var(&tree))
-		retval = 1;
-
-	if (!check_unknown_dirs(&tree))
-		retval = 1;
-
-	if (retval == 0 && tree.path_info == NULL) {
-		log_error("Did not find anything interesting at %s", root_path);
-		retval = 2;
-	}
-
-	if (retval) {
-		printf("Aborting due to errors\n");
-		return retval;
-	}
+	if (!check_for_stray_files(real_tree))
+		return 1;
 
 	if ((env_name = opt_environment_name) == NULL)
 		env_name = wormhole_const_basename(root_path);
 
-	if (opt_output != NULL) {
+	if (opt_output != NULL && !strcmp(opt_output, "-")) {
 		if (!strcmp(opt_output, "auto"))
 			log_fatal("Don't know where to write output file (you requested \"auto\" mode)");
 
@@ -762,16 +692,14 @@ wormhole_auto_profile(const char *root_path)
 		if (fp == NULL)
 			log_fatal("Unable to open %s for writing: %m", opt_output);
 
-		dump_config(fp, &tree, env_name);
+		dump_config(fp, env_name,  output);
 		fclose(fp);
 
 		printf("Environment definition written to %s\n", opt_output);
 	} else {
-		dump_config(stdout, &tree, env_name);
+		dump_config(stdout, env_name,  output);
 		fflush(stdout);
 	}
 
-	if (remove_work)
-		__remove(__make_path(root_path, "work"), DT_DIR);
 	return retval;
 }

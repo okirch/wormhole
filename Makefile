@@ -1,5 +1,6 @@
 BINDIR		= /usr/bin
 SBINDIR		= /usr/sbin
+ETCDIR		= /etc
 MAN1DIR		= /usr/share/man/man1
 MAN5DIR		= /usr/share/man/man5
 MAN8DIR		= /usr/share/man/man8
@@ -44,7 +45,10 @@ DIGGER_SRCS	= digger.c \
 		  util.c
 DIGGER_OBJS	= $(DIGGER_SRCS:.c=.o)
 AUTOPROF	= wormhole-autoprofile
+AUTOPROF_CONF	= autoprofile-default.conf
 AUTOPROF_SRCS	= auto-profile.c \
+		  config.c \
+		  pathstate.c \
 		  tracing.c \
 		  util.c
 AUTOPROF_OBJS	= $(AUTOPROF_SRCS:.c=.o)
@@ -67,10 +71,12 @@ install: $(WORMHOLE) $(WORMHOLED) $(DIGGER)
 	*) echo "DESTDIR is a relative path, no workie" >&2; exit 2;; \
 	esac
 	install -m 755 -d $(DESTDIR)$(BINDIR)
+	install -m 755 -d $(DESTDIR)$(ETCDIR)
 	install -m 555 $(WORMHOLE) $(DESTDIR)$(BINDIR)
 #	install -m 555 $(WORMHOLED) $(DESTDIR)$(SBINDIR)
 	install -m 555 $(DIGGER) $(DESTDIR)$(SBINDIR)
 	install -m 555 $(AUTOPROF) $(DESTDIR)$(SBINDIR)
+	install -m 644 $(AUTOPROF_CONF) $(DESTDIR)$(ETCDIR)
 ifneq ($(MAN1PAGES),)
 	install -m 755 -d $(DESTDIR)$(MAN1DIR)
 	install -m 444 $(MAN1PAGES) $(DESTDIR)$(MAN1DIR)
