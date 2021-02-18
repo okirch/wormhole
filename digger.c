@@ -56,7 +56,7 @@ const char *		opt_overlay_root = NULL;
 bool			opt_privileged_namespace = false;
 bool			opt_clean = false;
 
-static int		wormhole_digger(int argc, char **argv);
+static bool		wormhole_digger(int argc, char **argv);
 
 int
 main(int argc, char **argv)
@@ -93,7 +93,12 @@ main(int argc, char **argv)
 
 	wormhole_common_load_config(opt_config_path);
 
-	return wormhole_digger(argc - optind, argv + optind);
+	if (!wormhole_digger(argc - optind, argv + optind)) {
+		log_error("Failed to dig wormhole.");
+		return 1;
+	}
+
+	return 0;
 }
 
 static bool
@@ -400,7 +405,7 @@ clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 	return true;
 }
 
-int
+bool
 wormhole_digger(int argc, char **argv)
 {
 	char *shell_argv[] = { "/bin/bash", NULL };
@@ -431,38 +436,54 @@ wormhole_digger(int argc, char **argv)
 		}
 	}
 
-	if (!fsutil_makedirs(opt_overlay_root, 0755))
-		log_fatal("Unable to create overlay root at %s", opt_overlay_root);
-
-	if (opt_privileged_namespace) {
-		if (!wormhole_create_namespace())
-			log_fatal("Unable to set up privileged namespace");
-	} else {
-		if (!wormhole_create_user_namespace())
-			log_fatal("Unable to set up user namespace");
+	if (!fsutil_makedirs(opt_overlay_root, 0755)) {
+		log_error("Unable to create overlay root at %s", opt_overlay_root);
+		return false;
 	}
 
-	if (!fsutil_make_fs_private("/"))
-		log_fatal("Unable to change file system root to private (no propagation)");
+	if (opt_privileged_namespace) {
+		if (!wormhole_create_namespace()) {
+			log_error("Unable to set up privileged namespace");
+			return false;
+		}
+	} else {
+		if (!wormhole_create_user_namespace()) {
+			log_error("Unable to set up user namespace");
+			return false;
+		}
+	}
+
+	if (!fsutil_make_fs_private("/")) {
+		log_error("Unable to change file system root to private (no propagation)");
+		return false;
+	}
 
 	if (opt_base_environment != 0) {
 		/* Set up base environment */
 		wormhole_environment_t *env = NULL;
 
-                if ((env = wormhole_environment_find(opt_base_environment)) == NULL)
-			log_fatal("Unknown environment %s", opt_base_environment);
+                if ((env = wormhole_environment_find(opt_base_environment)) == NULL) {
+			log_error("Unknown environment %s", opt_base_environment);
+			return false;
+		}
 
-		if (!wormhole_environment_setup(env))
-			log_fatal("Failed to set up base environment %s", opt_base_environment);
+		if (!wormhole_environment_setup(env)) {
+			log_error("Failed to set up base environment %s", opt_base_environment);
+			return false;
+		}
 	}
 
 	assembled_tree = smoke_and_mirrors(opt_overlay_root);
-	if (assembled_tree == NULL)
-		log_fatal("unable to set up transparent overlay");
+	if (assembled_tree == NULL) {
+		log_error("unable to set up transparent overlay");
+		return false;
+	}
 
 	root_dir = wormhole_tree_state_get_root(assembled_tree);
-	if (!wormhole_digger_build(argv, root_dir))
-		log_fatal("failed to build environment");
+	if (!wormhole_digger_build(argv, root_dir)) {
+		log_error("failed to build environment");
+		return false;
+	}
 
 	if (!fsutil_lazy_umount(root_dir)) {
 		log_error("Unable to detach filesystem tree");
@@ -470,11 +491,15 @@ wormhole_digger(int argc, char **argv)
 	}
 
 	trace("Now combine the tree\n");
-	if (!combine_tree(opt_overlay_root, assembled_tree))
-		log_fatal("failed to combine subtrees");
+	if (!combine_tree(opt_overlay_root, assembled_tree)) {
+		log_error("failed to combine subtrees");
+		return false;
+	}
 
-	if (!clean_tree(opt_overlay_root, assembled_tree))
-		log_fatal("Error during cleanup");
+	if (!clean_tree(opt_overlay_root, assembled_tree)) {
+		log_error("Error during cleanup");
+		return false;
+	}
 
-	return 0;
+	return true;
 }
