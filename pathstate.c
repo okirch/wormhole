@@ -364,6 +364,26 @@ wormhole_tree_state_set_ignore(wormhole_tree_state_t *tree, const char *path)
 	__wormhole_tree_state_set(tree, path, WORMHOLE_PATH_STATE_IGNORED);
 }
 
+void
+wormhole_tree_state_set_user_data(wormhole_tree_state_t *tree, const char *path, void *user_data)
+{
+	wormhole_path_state_node_t *ps;
+
+	ps = wormhole_path_state_node_lookup(tree, path, true);
+	ps->state.user_data = user_data;
+}
+
+void *
+wormhole_tree_state_get_user_data(wormhole_tree_state_t *tree, const char *path)
+{
+	wormhole_path_state_node_t *ps;
+
+	ps = wormhole_path_state_node_lookup(tree, path, false);
+	if (ps == NULL)
+		return NULL;
+	return ps->state.user_data;
+}
+
 struct wormhole_tree_walker {
 	wormhole_tree_state_t *		tree;
 	wormhole_path_state_node_t *	pos;

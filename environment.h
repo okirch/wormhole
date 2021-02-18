@@ -54,6 +54,7 @@ typedef struct wormhole_path_state_node wormhole_path_state_node_t;
 
 typedef struct wormhole_path_state {
 	int			state;
+	void *			user_data;
 	union {
 		struct {
 			char *	upperdir;
@@ -108,6 +109,8 @@ extern void			wormhole_tree_state_set_bind_mounted(wormhole_tree_state_t *, cons
 extern void			wormhole_tree_state_set_overlay_mounted(wormhole_tree_state_t *, const char *path, const char *upperdir);
 extern void			wormhole_tree_state_set_fake_overlay_mounted(wormhole_tree_state_t *, const char *path, const char *upperdir);
 extern void			wormhole_tree_state_set_ignore(wormhole_tree_state_t *, const char *path);
+extern void			wormhole_tree_state_set_user_data(wormhole_tree_state_t *, const char *path, void *user_data);
+extern void *			wormhole_tree_state_get_user_data(wormhole_tree_state_t *, const char *path);
 extern void			wormhole_tree_dump(wormhole_tree_state_t *tree);
 
 extern wormhole_tree_walker_t *wormhole_tree_walk(wormhole_tree_state_t *tree);
