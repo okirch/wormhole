@@ -538,11 +538,14 @@ fsutil_dir_is_empty(const char *path)
 	return empty;
 }
 
+typedef int	__fsutil_ftw_internal_cb_fn_t(const char *dir_path, int dir_fd, const struct dirent *d, int flags, void *closure);
+
 static bool
-__fsutil_ftw(const char *dir_path, int dirfd, struct stat *dir_stat, fsutil_ftw_cb_fn_t *callback, void *closure, int flags)
+__fsutil_ftw(const char *dir_path, int dirfd, struct stat *dir_stat, __fsutil_ftw_internal_cb_fn_t *callback, void *closure, int flags)
 {
 	DIR *dir;
 	struct dirent *d;
+	bool cb_pre = false, cb_post = false;
 	bool ok = true;
 
 	/* trace3("%s(%s)", __func__, dir_path); */
@@ -554,15 +557,24 @@ __fsutil_ftw(const char *dir_path, int dirfd, struct stat *dir_stat, fsutil_ftw_
 		return false;
 	}
 
+	if (flags & FSUTIL_FTW_DEPTH_FIRST)
+		cb_post = true;
+	else if (flags & FSUTIL_FTW_PRE_POST_CALLBACK)
+		cb_pre = cb_post = true;
+	else
+		cb_pre = true;
+
 	// __make_path_push();
 	while (ok && (d = readdir(dir)) != NULL) {
+		int cbflags = 0;
+
 		if (d->d_name[0] == '.' && (d->d_name[1] == '\0' || d->d_name[1] == '.'))
 			continue;
 
 		if (d->d_type == DT_DIR) {
 			struct stat child_stb, *child_stat = NULL;
 			char child_path[PATH_MAX];
-			int childfd;
+			int childfd, rv;
 
 			if (flags & FSUTIL_FTW_ONE_FILESYSTEM) {
 				if (fstatat(dirfd, d->d_name, &child_stb, AT_NO_AUTOMOUNT | AT_SYMLINK_NOFOLLOW) < 0) {
@@ -590,17 +602,31 @@ __fsutil_ftw(const char *dir_path, int dirfd, struct stat *dir_stat, fsutil_ftw_
 
 			snprintf(child_path, sizeof(child_path), "%s/%s", dir_path, d->d_name);
 
-			if (flags & FSUTIL_FTW_DEPTH_FIRST) {
-				ok = __fsutil_ftw(child_path, childfd, child_stat, callback, closure, flags)
-				  && callback(dir_path, dirfd, d, closure);
-			} else {
-				ok = callback(dir_path, dirfd, d, closure)
-				  && __fsutil_ftw(child_path, childfd, child_stat, callback, closure, flags);
+			if (cb_pre) {
+				rv = callback(dir_path, dirfd, d, cbflags | FSUTIL_FTW_PRE_DESCENT, closure);
+				if (rv == FTW_ERROR || rv == FTW_ABORT)
+					ok = false;
+
+				if (rv != FTW_CONTINUE)
+					continue;
+			}
+
+			/* Descend into the directory */
+			if (ok)
+				ok = __fsutil_ftw(child_path, childfd, child_stat, callback, closure, flags);
+
+			if (cb_post) {
+				rv = callback(dir_path, dirfd, d, cbflags | FSUTIL_FTW_POST_DESCENT, closure);
+				if (rv == FTW_ERROR || rv == FTW_ABORT)
+					ok = false;
+
+				/* In a depth-first traversal, it does not make any sense for the callback
+				 * function to return FTW_SKIP as we've already processed the subdir. */
 			}
 
 			close(childfd);
 		} else {
-			ok = callback(dir_path, dirfd, d, closure);
+			ok = callback(dir_path, dirfd, d, cbflags, closure);
 		}
 	}
 	// __make_path_pop();
@@ -609,10 +635,23 @@ __fsutil_ftw(const char *dir_path, int dirfd, struct stat *dir_stat, fsutil_ftw_
 	return ok;
 }
 
+struct fsutil_ftw_user_context {
+	fsutil_ftw_cb_fn_t *	user_callback;
+	void *			user_closure;
+};
+
+static int
+__fsutil_ftw_callback(const char *dir_path, int dir_fd, const struct dirent *d, int flags, void *closure)
+{
+	struct fsutil_ftw_user_context *ctx = closure;
+
+	return ctx->user_callback(dir_path, d, flags, ctx->user_closure);
+}
 
 bool
 fsutil_ftw(const char *dir_path, fsutil_ftw_cb_fn_t *callback, void *closure, int flags)
 {
+	struct fsutil_ftw_user_context ctx;
 	struct stat stb, *dir_stat = NULL;
 	int dirfd;
 	bool ok = true;
@@ -637,7 +676,10 @@ fsutil_ftw(const char *dir_path, fsutil_ftw_cb_fn_t *callback, void *closure, in
 		dir_stat = &stb;
 	}
 
-	ok = __fsutil_ftw(dir_path, dirfd, dir_stat, callback, closure, flags);
+	ctx.user_callback = callback;
+	ctx.user_closure = closure;
+
+	ok = __fsutil_ftw(dir_path, dirfd, dir_stat, __fsutil_ftw_callback, &ctx, flags);
 
 out:
 	close(dirfd);
@@ -647,8 +689,8 @@ out:
 /*
  * Recursively remove directory hierarchy
  */
-static bool
-__fsutil_remove_callback(const char *dir_path, int dir_fd, const struct dirent *d, void *dummy_closure)
+static int
+__fsutil_remove_callback(const char *dir_path, int dir_fd, const struct dirent *d, int cbflags, void *dummy_closure)
 {
 	int flags = 0;
 
@@ -657,10 +699,10 @@ __fsutil_remove_callback(const char *dir_path, int dir_fd, const struct dirent *
 
 	if (unlinkat(dir_fd, d->d_name, flags) < 0) {
 		log_error("Cannot remove %s/%s: %m", dir_path, d->d_name);
-		return false;
+		return FTW_ERROR;
 	}
 
-	return true;
+	return FTW_CONTINUE;
 }
 
 bool

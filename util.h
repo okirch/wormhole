@@ -56,11 +56,24 @@ extern bool			fsutil_dir_is_empty(const char *path);
 extern bool			fsutil_exists(const char *path);
 extern bool			fsutil_remove_recursively(const char *dir_path);
 
+/* ftw input flags */
 #define FSUTIL_FTW_IGNORE_OPEN_ERROR	0x0001
 #define FSUTIL_FTW_DEPTH_FIRST		0x0002
-#define FSUTIL_FTW_ONE_FILESYSTEM	0x0004
+#define FSUTIL_FTW_PRE_POST_CALLBACK	0x0004
+#define FSUTIL_FTW_ONE_FILESYSTEM	0x0008
 
-typedef bool			fsutil_ftw_cb_fn_t(const char *dir_path, int dir_fd, const struct dirent *d, void *closure);
+/* ftw callback flags */
+#define FSUTIL_FTW_PRE_DESCENT		0x0010
+#define FSUTIL_FTW_POST_DESCENT		0x0020
+
+enum {
+	FTW_ERROR,
+	FTW_ABORT,
+	FTW_SKIP,
+	FTW_CONTINUE
+};
+
+typedef int			fsutil_ftw_cb_fn_t(const char *dir_path, const struct dirent *d, int flags, void *closure);
 extern bool			fsutil_ftw(const char *dir_path, fsutil_ftw_cb_fn_t *callback, void *closure, int flags);
 
 extern bool			fsutil_mount_overlay(const char *lowerdir,
