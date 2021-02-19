@@ -1,6 +1,7 @@
 BINDIR		= /usr/bin
 SBINDIR		= /usr/sbin
 ETCDIR		= /etc
+IMGDIR		= /usr/lib/sysimage/wormhole
 MAN1DIR		= /usr/share/man/man1
 MAN5DIR		= /usr/share/man/man5
 MAN8DIR		= /usr/share/man/man8
@@ -72,6 +73,7 @@ install: $(WORMHOLE) $(WORMHOLED) $(DIGGER)
 	esac
 	install -m 755 -d $(DESTDIR)$(BINDIR)
 	install -m 755 -d $(DESTDIR)$(ETCDIR)
+	install -m 755 -d $(DESTDIR)$(IMGDIR)
 	install -m 555 $(WORMHOLE) $(DESTDIR)$(BINDIR)
 #	install -m 555 $(WORMHOLED) $(DESTDIR)$(SBINDIR)
 	install -m 555 $(DIGGER) $(DESTDIR)$(SBINDIR)
