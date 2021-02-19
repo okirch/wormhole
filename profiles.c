@@ -95,12 +95,12 @@ __wormhole_environment_add_layer(wormhole_environment_t *env, struct wormhole_la
 static bool
 __wormhole_environment_chase_layers(wormhole_environment_t *env, struct wormhole_environment_config *env_cfg)
 {
-	struct wormhole_layer_config *overlay;
+	struct wormhole_layer_config *layer;
 
-	for (overlay = env_cfg->layers; overlay; overlay = overlay->next) {
-		/* If the overlay refers to another environment, splice its layers into our list. */
-		if (overlay->lower_layer_name) {
-			const char *lower_name = overlay->lower_layer_name;
+	for (layer = env_cfg->layers; layer; layer = layer->next) {
+		/* If the layer refers to another environment, splice its layers into our list. */
+		if (layer->type == WORMHOLE_LAYER_TYPE_REFERENCE) {
+			const char *lower_name = layer->lower_layer_name;
 			wormhole_environment_t *lower;
 
 			if ((lower = wormhole_environment_find(lower_name)) == NULL) {
@@ -112,7 +112,8 @@ __wormhole_environment_chase_layers(wormhole_environment_t *env, struct wormhole
 			if (!__wormhole_environment_chase_layers(env, lower->config))
 				return false;
 		} else
-		if (!__wormhole_environment_add_layer(env, overlay))
+		/* FIXME: we should check whether we already have this layer */
+		if (!__wormhole_environment_add_layer(env, layer))
 			return false;
 	}
 
