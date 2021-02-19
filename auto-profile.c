@@ -39,10 +39,13 @@
 
 struct option wormhole_options[] = {
 	{ "debug",		no_argument,		NULL,	'd' },
+	{ "quiet",		no_argument,		NULL,	'q' },
 	{ "base-environment",	required_argument,	NULL,	'B' },
 	{ "overlay-root",	required_argument,	NULL,	'R' },
 	{ "environment-name",	required_argument,	NULL,	'N' },
 	{ "output-file",	required_argument,	NULL,	'O' },
+	{ "profile",		required_argument,	NULL,	'P' },
+	{ "create-exclude-list",required_argument,	NULL,	'X' },
 	{ NULL }
 };
 
@@ -50,6 +53,9 @@ const char *		opt_base_environment = NULL;
 const char *		opt_overlay_root = NULL;
 const char *		opt_environment_name = NULL;
 const char *		opt_output = NULL;
+const char *		opt_profile = "autoprofile-default.conf";
+const char *		opt_exclude_file = NULL;
+bool			opt_quiet = false;
 
 static int		wormhole_auto_profile(const char *);
 
@@ -58,10 +64,14 @@ main(int argc, char **argv)
 {
 	int c;
 
-	while ((c = getopt_long(argc, argv, "d", wormhole_options, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "dq", wormhole_options, NULL)) != EOF) {
 		switch (c) {
 		case 'd':
 			tracing_increment_level();
+			break;
+
+		case 'q':
+			opt_quiet = true;
 			break;
 
 		case 'B':
@@ -76,8 +86,16 @@ main(int argc, char **argv)
 			opt_environment_name = optarg;
 			break;
 
+		case 'P':
+			opt_profile = optarg;
+			break;
+
 		case 'O':
 			opt_output = optarg;
+			break;
+
+		case 'X':
+			opt_exclude_file = optarg;
 			break;
 
 		default:
@@ -244,7 +262,8 @@ perform_ignore(wormhole_tree_state_t *tree, const char *arg, struct wormhole_lay
 	const char *path = __build_path(tree, arg);
 
 	if (fsutil_exists(path)) {
-		log_info("Actively ignoring %s", arg);
+		if (!opt_quiet)
+			log_info("Actively ignoring %s", arg);
 		wormhole_tree_state_set_ignore(tree, arg);
 	}
 
@@ -281,22 +300,86 @@ perform_ignore_empty_subdirs(wormhole_tree_state_t *tree, const char *arg, struc
 	return true;
 }
 
+static inline void
+__perform_bind(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output, const char *path)
+{
+	if (!opt_quiet)
+		log_info("Binding %s", arg);
+	wormhole_layer_config_add_path(output, WORMHOLE_PATH_TYPE_BIND, arg);
+	wormhole_tree_state_set_bind_mounted(tree, arg);
+}
+
+static inline void
+__perform_overlay(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output, const char *path)
+{
+	if (!opt_quiet)
+		log_info("Overlaying %s", arg);
+	wormhole_layer_config_add_path(output, WORMHOLE_PATH_TYPE_OVERLAY, arg);
+	wormhole_tree_state_set_overlay_mounted(tree, arg, NULL);
+}
+
+static bool
+perform_overlay(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	const char *path = __build_path(tree, arg);
+
+	if (!fsutil_isdir(path)) {
+		log_error("Asked to overlay %s, but it does not exist", arg);
+		return false;
+	}
+
+	__perform_overlay(tree, arg, output, path);
+	return true;
+}
+
+static bool
+perform_bind(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	const char *path = __build_path(tree, arg);
+
+	if (!fsutil_isdir(path)) {
+		log_error("Asked to bind %s, but it does not exist", arg);
+		return false;
+	}
+
+	__perform_bind(tree, arg, output, path);
+	return true;
+}
+
+static inline bool
+__is_empty(wormhole_tree_state_t *tree, const char *arg, const char *path)
+{
+	if (!fsutil_isdir(path))
+		return true;
+
+	if (fsutil_dir_is_empty(path)) {
+		if (!opt_quiet)
+			log_info("Ignoring empty directory %s", arg);
+		wormhole_tree_state_set_ignore(tree, arg);
+		return true;
+	}
+
+	return false;
+}
+
 static bool
 perform_overlay_unless_empty(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
 {
 	const char *path = __build_path(tree, arg);
 
-	if (!fsutil_isdir(path))
-		return true;
+	if (!__is_empty(tree, arg, path))
+		__perform_overlay(tree, arg, output, path);
 
-	if (fsutil_dir_is_empty(path)) {
-		log_info("Ignoring empty directory %s", arg);
-		wormhole_tree_state_set_ignore(tree, arg);
-	} else {
-		log_info("Overlaying %s", arg);
-		wormhole_layer_config_add_path(output, WORMHOLE_PATH_TYPE_OVERLAY, arg);
-		wormhole_tree_state_set_overlay_mounted(tree, arg, NULL);
-	}
+	return true;
+}
+
+static bool
+perform_bind_unless_empty(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	const char *path = __build_path(tree, arg);
+
+	if (!__is_empty(tree, arg, path))
+		__perform_bind(tree, arg, output, path);
 
 	return true;
 }
@@ -310,7 +393,8 @@ perform_must_be_empty(wormhole_tree_state_t *tree, const char *arg, struct wormh
 		return true;
 
 	if (fsutil_dir_is_empty(path)) {
-		log_info("Ignoring empty directory %s", arg);
+		if (!opt_quiet)
+			log_info("Ignoring empty directory %s", arg);
 		wormhole_tree_state_set_ignore(tree, arg);
 	} else {
 		log_error("%s exists but is not empty. Adjust your config.", arg);
@@ -330,7 +414,8 @@ perform_check_ldconfig(wormhole_tree_state_t *tree, const char *arg, struct worm
 	path = __build_path(tree, arg);
 
 	if (fsutil_exists(path)) {
-		log_info("Found %s, configuring layer to use ldconfig", arg);
+		if (!opt_quiet)
+			log_info("Found %s, configuring layer to use ldconfig", arg);
 		wormhole_tree_state_set_ignore(tree, arg);
 		output->use_ldconfig = true;
 	}
@@ -437,8 +522,17 @@ load_autoprofile_config(const char *filename)
 		if (!strcmp(kwd, "optional-directory")) {
 			a->perform = perform_optional_directory;
 		} else
+		if (!strcmp(kwd, "overlay")) {
+			a->perform = perform_overlay;
+		} else
 		if (!strcmp(kwd, "overlay-unless-empty")) {
 			a->perform = perform_overlay_unless_empty;
+		} else
+		if (!strcmp(kwd, "bind")) {
+			a->perform = perform_bind;
+		} else
+		if (!strcmp(kwd, "bind-unless-empty")) {
+			a->perform = perform_bind_unless_empty;
 		} else
 		if (!strcmp(kwd, "must-be-empty")) {
 			a->perform = perform_must_be_empty;
@@ -511,8 +605,10 @@ __stray_count(struct stray_state *state, const char *d_path, int d_type)
 		log_error("Stray %s: %s", (d_type == DT_DIR)? "directory" : "file", d_path);
 	state->stray_count += 1;
 
-	state->current->stray_count += 1;
-	state->current->stray_children += 1;
+	if (state->current) {
+		state->current->stray_count += 1;
+		state->current->stray_children += 1;
+	}
 }
 
 static struct stray_dir_level *
@@ -580,7 +676,7 @@ __check_for_stray_files_visitor(const char *dir_path, const struct dirent *d, in
 		struct stray_dir_level *dir;
 
 		dir = __stray_enter_directory(state);
-		if (path_state->user_data) {
+		if (path_state && path_state->user_data) {
 			struct dir_disposition *disp = path_state->user_data;
 
 			/* stick it into state->current */
@@ -603,14 +699,20 @@ __check_for_stray_files_visitor(const char *dir_path, const struct dirent *d, in
 		struct stray_dir_level *dir = __stray_leave_directory(state);
 
 		if (dir->stray_count == 0 && dir->disposition.ignore_empty_descendants) {
-			log_info("Ignoring empty directory %s", d_path);
+			if (!opt_quiet)
+				log_info("Ignoring empty directory %s", d_path);
+			wormhole_tree_state_set_ignore(state->tree, d_path);
 			return FTW_CONTINUE;
 		}
 		if (dir->stray_children == 0 && dir->disposition.ignore_empty) {
-			log_info("Ignoring empty directory %s", d_path);
+			if (!opt_quiet)
+				log_info("Ignoring empty directory %s", d_path);
+			wormhole_tree_state_set_ignore(state->tree, d_path);
 			return FTW_CONTINUE;
 		}
-		log_info("%s has %u children, %u descendants total", d_path, dir->stray_children, dir->stray_count);
+		if (dir->stray_children + dir->stray_count)
+			if (!opt_quiet)
+				log_info("%s has %u children, %u descendants total", d_path, dir->stray_children, dir->stray_count);
 	}
 
 	__stray_count(state, d_path, d->d_type);
@@ -628,13 +730,42 @@ check_for_stray_files(wormhole_tree_state_t *tree)
 	state.tree_root_len = strlen(tree_root);
 	state.tree = tree;
 
-	if (!fsutil_ftw(tree_root, __check_for_stray_files_visitor, &state, FSUTIL_FTW_PRE_POST_CALLBACK))
+	if (!fsutil_ftw(tree_root, __check_for_stray_files_visitor, &state, FSUTIL_FTW_PRE_POST_CALLBACK | FSUTIL_FTW_ONE_FILESYSTEM))
 		return false;
 
 	if (state.stray_count != 0) {
 		log_error("Found %u stray files or directories", state.stray_count);
 		return false;
 	}
+
+	return true;
+}
+
+static bool
+write_exclude_file(const char *exclude_file, wormhole_tree_state_t *tree)
+{
+	wormhole_tree_walker_t *walk;
+	wormhole_path_state_t *ps;
+	const char *path;
+	FILE *fp;
+
+	if (!strcmp(exclude_file, "-"))
+		fp = stdout;
+	else if (!(fp = fopen(exclude_file, "w"))) {
+		log_error("Cannot open %s for writing: %m", exclude_file);
+		return false;
+	}
+
+	walk = wormhole_tree_walk(tree);
+	while ((ps = wormhole_tree_walk_next(walk, &path)) != NULL) {
+		if (ps->state == WORMHOLE_PATH_STATE_IGNORED)
+			fprintf(fp, "%s\n", path);
+	}
+
+	wormhole_tree_walk_end(walk);
+
+	if (fp != stdout)
+		fclose(fp);
 
 	return true;
 }
@@ -656,7 +787,8 @@ wormhole_auto_profile(const char *root_path)
 
 	subdir = __make_path(root_path, "tree");
 	if (fsutil_isdir(subdir)) {
-		log_info("This looks like a tree created by wormhole-digger, assuming the file system root is at %s", subdir);
+		if (!opt_quiet)
+			log_info("This looks like a tree created by wormhole-digger, assuming the file system root is at %s", subdir);
 
 		tree_root = strdup(subdir);
 
@@ -669,7 +801,7 @@ wormhole_auto_profile(const char *root_path)
 	real_tree = wormhole_tree_state_new();
 	wormhole_tree_state_set_root(real_tree, tree_root);
 
-	config = load_autoprofile_config("autoprofile-default.conf");
+	config = load_autoprofile_config(opt_profile);
 	if (config == NULL)
 		return 1;
 
@@ -684,7 +816,7 @@ wormhole_auto_profile(const char *root_path)
 	if ((env_name = opt_environment_name) == NULL)
 		env_name = wormhole_const_basename(root_path);
 
-	if (opt_output != NULL && !strcmp(opt_output, "-")) {
+	if (opt_output != NULL && strcmp(opt_output, "-")) {
 		if (!strcmp(opt_output, "auto"))
 			log_fatal("Don't know where to write output file (you requested \"auto\" mode)");
 
@@ -700,6 +832,9 @@ wormhole_auto_profile(const char *root_path)
 		dump_config(stdout, env_name,  output);
 		fflush(stdout);
 	}
+
+	if (opt_exclude_file)
+		write_exclude_file(opt_exclude_file, real_tree);
 
 	return retval;
 }
