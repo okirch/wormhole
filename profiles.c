@@ -633,7 +633,7 @@ pathinfo_process(wormhole_environment_t *env, const wormhole_path_info_t *pi, co
  * Some overlays contain shared libraries. Maintain a separate ld.so.cache inside the layer.
  */
 static bool
-wormhole_overlay_ldconfig(wormhole_environment_t *env, const struct wormhole_layer_config *overlay, const char *overlay_root)
+wormhole_layer_ldconfig(wormhole_environment_t *env, const struct wormhole_layer_config *layer, const char *overlay_root)
 {
 	char overlay_etc[PATH_MAX];
 	int verdict;
@@ -664,7 +664,7 @@ wormhole_overlay_ldconfig(wormhole_environment_t *env, const struct wormhole_lay
 		verdict = -1;
 	}
 
-	/* If the overlay has its own version of /etc/ld.so.cache that has a more recent time
+	/* If the layer has its own version of /etc/ld.so.cache that has a more recent time
 	 * stamp than the "real" one, there's no need to regenerate.
 	 */
 	if (verdict < 0 || !(verdict & FSUTIL_FILE_YOUNGER)) {
@@ -694,7 +694,7 @@ wormhole_overlay_ldconfig(wormhole_environment_t *env, const struct wormhole_lay
 }
 
 static bool
-wormhole_overlay_setup(wormhole_environment_t *env, const struct wormhole_layer_config *overlay)
+wormhole_layer_setup(wormhole_environment_t *env, const struct wormhole_layer_config *layer)
 {
 	const char *overlay_root;
 	const wormhole_path_info_t *pi;
@@ -702,31 +702,31 @@ wormhole_overlay_setup(wormhole_environment_t *env, const struct wormhole_layer_
 	bool ok = true;
 	unsigned int i;
 
-	if (overlay->npaths == 0)
+	if (layer->npaths == 0)
 		return true;
 
-	if (overlay->image) {
+	if (layer->image) {
 		/* The overlay is provided via a container image. */
-		overlay_root = overlay_container_mount(env, overlay->image);
+		overlay_root = overlay_container_mount(env, layer->image);
 		if (!overlay_root)
-			log_error("Environment %s: unable to mount container \"%s\"", env->name, overlay->image);
+			log_error("Environment %s: unable to mount container \"%s\"", env->name, layer->image);
 		mounted = true;
 	} else {
-		assert(overlay->directory);
-		overlay_root = overlay->directory;
+		assert(layer->directory);
+		overlay_root = layer->directory;
 	}
 
-	for (i = 0, pi = overlay->path; ok && i < overlay->npaths; ++i, ++pi) {
+	for (i = 0, pi = layer->path; ok && i < layer->npaths; ++i, ++pi) {
 		trace("Environment %s: pathinfo %s: %s", env->name,
 				pathinfo_type_string(pi->type), pi->path);
 		ok = pathinfo_process(env, pi, overlay_root);
 		trace("  result: %sok", ok? "" : "not ");
 	}
 
-	if (ok && overlay->use_ldconfig)
-		ok = wormhole_overlay_ldconfig(env, overlay, overlay_root);
+	if (ok && layer->use_ldconfig)
+		ok = wormhole_layer_ldconfig(env, layer, overlay_root);
 
-	if (mounted && !overlay_container_unmount(env, overlay->image, overlay_root)) {
+	if (mounted && !overlay_container_unmount(env, layer->image, overlay_root)) {
 		log_error("Environment %s: unable to unmount \"%s\": %m", env->name, overlay_root);
 		ok = false;
 	}
@@ -747,9 +747,9 @@ wormhole_environment_setup(wormhole_environment_t *env)
 	env->tree_state = wormhole_tree_state_new();
 
 	for (i = 0; i < env->nlayers; ++i) {
-		struct wormhole_layer_config *overlay = env->layer[i];
+		struct wormhole_layer_config *layer = env->layer[i];
 
-		if (!wormhole_overlay_setup(env, overlay))
+		if (!wormhole_layer_setup(env, layer))
 			return false;
 	}
 
