@@ -30,8 +30,16 @@ struct wormhole_profile_config {
 	char *			environment;
 };
 
+enum {
+	WORMHOLE_LAYER_TYPE_LAYER,
+	WORMHOLE_LAYER_TYPE_REFERENCE,
+	WORMHOLE_LAYER_TYPE_IMAGE,
+};
+
 struct wormhole_layer_config {
 	struct wormhole_layer_config *next;
+
+	int			type;
 
 	char *			directory;
 	char *			image;

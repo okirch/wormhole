@@ -164,7 +164,7 @@ wormhole_profile_config_free(struct wormhole_profile_config *profile)
  * Overlay config object
  */
 static struct wormhole_layer_config *
-wormhole_layer_config_new(struct wormhole_environment_config *env)
+wormhole_layer_config_new(struct wormhole_environment_config *env, int type)
 {
 	struct wormhole_layer_config **pos, *layer;
 
@@ -172,6 +172,7 @@ wormhole_layer_config_new(struct wormhole_environment_config *env)
 		;
 
 	*pos = layer = calloc(1, sizeof(*layer));
+	layer->type = type;
 	return layer;
 }
 
@@ -581,7 +582,7 @@ __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct
 	if (!strcmp(kwd, "define-layer")) {
 		struct wormhole_layer_config *layer;
 
-		layer = wormhole_layer_config_new(env);
+		layer = wormhole_layer_config_new(env, WORMHOLE_LAYER_TYPE_LAYER);
 		if (!wormhole_config_process_block(layer, ps, __wormhole_config_overlay_directive))
 			return false;
 
@@ -596,7 +597,7 @@ __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct
 	if (!strcmp(kwd, "use-environment")) {
 		struct wormhole_layer_config *layer;
 
-		layer = wormhole_layer_config_new(env);
+		layer = wormhole_layer_config_new(env, WORMHOLE_LAYER_TYPE_REFERENCE);
 		if (!__wormhole_config_process_string(kwd, &layer->lower_layer_name, ps))
 			return false;
 
