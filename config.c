@@ -200,9 +200,10 @@ wormhole_layer_config_add_path(struct wormhole_layer_config *layer, int type, co
 
 	if ((layer->npaths % 16) == 0) {
 		if (layer->path == NULL) {
-			layer->path = malloc(16 * sizeof(layer->path[0]));
+			layer->path = calloc(16, sizeof(layer->path[0]));
 		} else {
 			layer->path = realloc(layer->path, (layer->npaths + 16) * sizeof(layer->path[0]));
+			memset(layer->path + layer->npaths, 0, 16 * sizeof(layer->path[0]));
 		}
 
 		if (layer->path == NULL)
