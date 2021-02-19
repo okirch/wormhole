@@ -46,11 +46,19 @@ struct parser_state {
 	char *			pos;
 };
 
+struct parser_obsolete_kwd {
+	const char *		old_keyword;
+	const char *		new_keyword;
+	bool			warned;
+};
+
 static bool		parser_open(struct parser_state *ps, const char *filename, struct parser_state *included_from);
 static void		parser_close(struct parser_state *ps);
 static bool		parser_next_line(struct parser_state *ps);
 static const char *	parser_next_word(struct parser_state *ps);
 static void		parser_error(struct parser_state *, const char *, ...);
+static void		parser_warning(struct parser_state *, const char *, ...);
+static const char *	parser_check_obsolete_keyword(struct parser_state *, const char *kwd, struct parser_obsolete_kwd *);
 
 static void		set_string(char **var, const char *s);
 
@@ -560,9 +568,16 @@ __wormhole_config_overlay_directive(void *block_obj, const char *kwd, struct par
 static bool
 __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct parser_state *ps)
 {
+	static struct parser_obsolete_kwd obsolete_keywords[] = {
+		{ "overlay",	"define-layer"		},
+		{ "layer",	"use-environment"	},
+		{ NULL }
+	};
 	struct wormhole_environment_config *env = block_obj;
 
-	if (!strcmp(kwd, "overlay")) {
+	kwd = parser_check_obsolete_keyword(ps, kwd, obsolete_keywords);
+
+	if (!strcmp(kwd, "define-layer")) {
 		struct wormhole_layer_config *layer;
 
 		layer = wormhole_layer_config_new(env);
@@ -577,7 +592,7 @@ __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct
 		return true;
 	}
 
-	if (!strcmp(kwd, "layer")) {
+	if (!strcmp(kwd, "use-environment")) {
 		struct wormhole_layer_config *layer;
 
 		layer = wormhole_layer_config_new(env);
@@ -684,6 +699,26 @@ parser_close(struct parser_state *ps)
 	ps->fp = NULL;
 }
 
+const char *
+parser_check_obsolete_keyword(struct parser_state *ps, const char *kwd, struct parser_obsolete_kwd *obsolete)
+{
+	struct parser_obsolete_kwd *o;
+
+	for (o = obsolete; o->old_keyword; ++o) {
+		if (strcmp(o->old_keyword, kwd))
+			continue;
+
+		if (!o->warned) {
+			parser_warning(ps, "obsolete keyword \"%s\", please use \"%s\" instead",
+					o->old_keyword, o->new_keyword);
+			o->warned = true;
+		}
+		return o->new_keyword;
+	}
+
+	return kwd;
+}
+
 void
 parser_error(struct parser_state *ps, const char *fmt, ...)
 {
@@ -702,6 +737,24 @@ parser_error(struct parser_state *ps, const char *fmt, ...)
 	}
 
 	ps->failed = true;
+}
+
+void
+parser_warning(struct parser_state *ps, const char *fmt, ...)
+{
+	char errmsg[1024];
+        va_list ap;
+
+        va_start(ap, fmt);
+	vsnprintf(errmsg, sizeof(errmsg), fmt, ap);
+        va_end(ap);
+
+	log_warning("%s:%d: %s", ps->filename, ps->lineno, errmsg);
+
+	while (ps->included_from) {
+		ps = ps->included_from;
+		log_error("  included from %s:%u", ps->filename, ps->lineno);
+	}
 }
 
 /*
