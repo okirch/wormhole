@@ -48,7 +48,7 @@ struct wormhole_environment_config {
 
 	char *			name;
 
-	struct wormhole_layer_config *overlays;
+	struct wormhole_layer_config *layers;
 };
 
 struct wormhole_config {

@@ -160,7 +160,7 @@ wormhole_layer_config_new(struct wormhole_environment_config *env)
 {
 	struct wormhole_layer_config **pos, *layer;
 
-	for (pos = &env->overlays; (layer = *pos) != NULL; pos = &layer->next)
+	for (pos = &env->layers; (layer = *pos) != NULL; pos = &layer->next)
 		;
 
 	*pos = layer = calloc(1, sizeof(*layer));
@@ -247,8 +247,8 @@ wormhole_environment_config_free(struct wormhole_environment_config *env)
 	set_string(&env->name, NULL);
 
 	/* free all overlays */
-	while ((layer = env->overlays) != NULL) {
-		env->overlays = layer->next;
+	while ((layer = env->layers) != NULL) {
+		env->layers = layer->next;
 		wormhole_layer_config_free(layer);
 	}
 
@@ -563,25 +563,25 @@ __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct
 	struct wormhole_environment_config *env = block_obj;
 
 	if (!strcmp(kwd, "overlay")) {
-		struct wormhole_layer_config *overlay;
+		struct wormhole_layer_config *layer;
 
-		overlay = wormhole_layer_config_new(env);
-		if (!wormhole_config_process_block(overlay, ps, __wormhole_config_overlay_directive))
+		layer = wormhole_layer_config_new(env);
+		if (!wormhole_config_process_block(layer, ps, __wormhole_config_overlay_directive))
 			return false;
 
-		if ((overlay->directory && overlay->image)
-		 || (!overlay->directory && !overlay->image)) {
-			parser_error(ps, "overlay needs to specify exactly one of \"directory\" and \"image\"");
+		if ((layer->directory && layer->image)
+		 || (!layer->directory && !layer->image)) {
+			parser_error(ps, "layer needs to specify exactly one of \"directory\" and \"image\"");
 			return false;
 		}
 		return true;
 	}
 
 	if (!strcmp(kwd, "layer")) {
-		struct wormhole_layer_config *overlay;
+		struct wormhole_layer_config *layer;
 
-		overlay = wormhole_layer_config_new(env);
-		if (!__wormhole_config_process_string(kwd, &overlay->lower_layer_name, ps))
+		layer = wormhole_layer_config_new(env);
+		if (!__wormhole_config_process_string(kwd, &layer->lower_layer_name, ps))
 			return false;
 
 		return true;

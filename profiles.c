@@ -97,7 +97,7 @@ __wormhole_environment_chase_layers(wormhole_environment_t *env, struct wormhole
 {
 	struct wormhole_layer_config *overlay;
 
-	for (overlay = env_cfg->overlays; overlay; overlay = overlay->next) {
+	for (overlay = env_cfg->layers; overlay; overlay = overlay->next) {
 		/* If the overlay refers to another environment, splice its layers into our list. */
 		if (overlay->lower_layer_name) {
 			const char *lower_name = overlay->lower_layer_name;
