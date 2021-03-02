@@ -82,7 +82,6 @@ run_command(wormhole_profile_t *profile, int argc, char **argv)
                 log_fatal("Failed to set up environment %s", env->name);
 
 	trace("Looking good so far\n");
-	execv(profile->config->command, argv);
 
-	log_fatal("Unable to execute %s: %m", profile->config->command);
+	wormhole_exec_command_argv(profile->config->command, argv, NULL);
 }
