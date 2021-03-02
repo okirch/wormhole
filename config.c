@@ -56,6 +56,7 @@ static bool		parser_open(struct parser_state *ps, const char *filename, struct p
 static void		parser_close(struct parser_state *ps);
 static bool		parser_next_line(struct parser_state *ps);
 static const char *	parser_next_word(struct parser_state *ps);
+static bool		parser_expect_end_of_line(struct parser_state *ps, const char *keyword);
 static void		parser_error(struct parser_state *, const char *, ...);
 static void		parser_warning(struct parser_state *, const char *, ...);
 static const char *	parser_check_obsolete_keyword(struct parser_state *, const char *kwd, struct parser_obsolete_kwd *);
@@ -692,6 +693,17 @@ parser_next_word(struct parser_state *ps)
 
 	ps->pos = *s? s : NULL;
 	return word;
+}
+
+bool
+parser_expect_end_of_line(struct parser_state *ps, const char *keyword)
+{
+	if (parser_next_word(ps) != NULL) {
+		parser_error(ps, "unexpected extra argument(s) to %s directive", keyword);
+		return false;
+	}
+
+	return true;
 }
 
 void
