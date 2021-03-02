@@ -760,19 +760,28 @@ fsutil_create_empty(const char *path)
 	return true;
 }
 
-bool
-fsutil_check_path_prefix(const char *path, const char *potential_prefix)
+const char *
+fsutil_strip_path_prefix(const char *path, const char *potential_prefix)
 {
 	unsigned int len;
 
 	if (potential_prefix == NULL || path == NULL)
-		return false;
+		return NULL;
 
 	len = strlen(potential_prefix);
 	if (strncmp(path, potential_prefix, len) != 0)
-		return false;
+		return NULL;
 
-	return path[len] == 0 || path[len] == '/';
+	if (path[len] != '\0' && path[len] != '/')
+		return NULL;
+
+	return path + len;
+}
+
+bool
+fsutil_check_path_prefix(const char *path, const char *potential_prefix)
+{
+	return fsutil_strip_path_prefix(path, potential_prefix) != NULL;
 }
 
 /*

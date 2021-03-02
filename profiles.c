@@ -547,7 +547,6 @@ pathinfo_process_glob(wormhole_environment_t *env, const wormhole_path_info_t *p
 			bool (*func)(wormhole_environment_t *env, const wormhole_path_info_t *pi, const char *overlay_root, const char *dest, const char *source))
 {
 	bool retval = false;
-	unsigned int overlay_path_len;
 	char pattern[PATH_MAX];
 	glob_t globbed;
 	size_t n;
@@ -566,19 +565,20 @@ pathinfo_process_glob(wormhole_environment_t *env, const wormhole_path_info_t *p
 		goto done;
 	}
 
-	overlay_path_len = strlen(overlay_root);
-
 	for (n = 0; n < globbed.gl_pathc; ++n) {
-		const char *source, *dest;
+		const char *source, *abs_path, *dest;
 
 		source = globbed.gl_pathv[n];
-		if (strncmp(source, overlay_root, overlay_path_len) != 0
-		 || source[overlay_path_len] != '/') {
+
+		/* The full path returned by glob() should start with the overlay_root.
+		 * Remove that prefix.
+		 */
+		if ((abs_path = fsutil_strip_path_prefix(source, overlay_root)) == NULL || *abs_path == '\0') {
 			log_error("%s: strange - glob expansion of %s returned path name %s", __func__,
 					pattern, source);
 			goto done;
 		}
-		dest = source + overlay_path_len;
+		dest = abs_path;
 
 		if (!func(env, pi, overlay_root, dest, source))
 			goto done;
