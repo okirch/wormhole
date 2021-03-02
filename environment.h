@@ -75,6 +75,18 @@ struct wormhole_environment {
 
 	struct wormhole_environment_config *config;
 
+	/* Directory where we assemble the root of the container's
+	 * file system.
+	 * In the case where we just overlay things on top of
+	 * the current tree, this will be empty, as the container
+	 * FS namespace is constructed in-place at /
+	 * In the case where we start with a full container image,
+	 * this will be the location of a new root directory
+	 * (and we will chroot to it after we're done with the
+	 * setup).
+	 */
+	char *			root_directory;
+
 	unsigned int		nlayers;
 	struct wormhole_layer_config *layer[WORMHOLE_ENVIRONMENT_LAYER_MAX];
 

@@ -277,6 +277,18 @@ wormhole_environment_find(const char *name)
 	return NULL;
 }
 
+const char *
+wormhole_environment_path(wormhole_environment_t *env, const char *abs_path)
+{
+	static char pathbuf[PATH_MAX];
+
+	if (env->root_directory) {
+		snprintf(pathbuf, sizeof(pathbuf), "%s%s", env->root_directory, abs_path);
+		return pathbuf;
+	}
+
+	return abs_path;
+}
 
 /*
  * Start a container for this image, and mount its file system.
@@ -578,7 +590,8 @@ pathinfo_process_glob(wormhole_environment_t *env, const wormhole_path_info_t *p
 					pattern, source);
 			goto done;
 		}
-		dest = abs_path;
+
+		dest = wormhole_environment_path(env, abs_path);
 
 		if (!func(env, pi, overlay_root, dest, source))
 			goto done;

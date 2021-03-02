@@ -83,5 +83,5 @@ run_command(wormhole_profile_t *profile, int argc, char **argv)
 
 	trace("Looking good so far\n");
 
-	wormhole_exec_command_argv(profile->config->command, argv, NULL);
+	wormhole_exec_command_argv(profile->config->command, argv, env->root_directory);
 }
