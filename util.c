@@ -322,7 +322,7 @@ wormhole_create_user_namespace(void)
 	orig_gid = getgid();
 
 	if (unshare(CLONE_NEWUSER|CLONE_NEWNS) < 0) {
-		perror("unshare");
+		log_error("unshare() failed: %m");
 		return false;
 	}
 
