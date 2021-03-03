@@ -173,6 +173,9 @@ pathinfo_action_to_directive(int action)
 	case WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN:
 		return "overlay-children";
 
+	case WORMHOLE_PATH_TYPE_MOUNT:
+		return "mount";
+
 	case WORMHOLE_PATH_TYPE_WORMHOLE:
 		return "wormhole";
 

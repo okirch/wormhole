@@ -189,9 +189,15 @@ wormhole_layer_config_free(struct wormhole_layer_config *layer)
 	if (layer->path) {
 		for (i = 0, pi = layer->path; i < layer->npaths; ++i, ++pi) {
 			set_string(&pi->path, NULL);
-		}
 
-		free(pi->path);
+			switch (pi->type) {
+			case WORMHOLE_PATH_TYPE_MOUNT:
+				set_string(&pi->mount.fstype, NULL);
+				set_string(&pi->mount.device, NULL);
+				set_string(&pi->mount.options, NULL);
+				break;
+			}
+		}
 	}
 }
 
@@ -219,6 +225,42 @@ wormhole_layer_config_add_path(struct wormhole_layer_config *layer, int type, co
 		pi->path = strdup(path);
 
 	return pi;
+}
+
+static bool
+wormhole_path_info_set_mount_fstype(wormhole_path_info_t *pi, const char *fstype)
+{
+	if (pi->type != WORMHOLE_PATH_TYPE_MOUNT) {
+		log_error("%s: path %s is not a mount point", __func__, pi->path);
+		return false;
+	}
+
+	set_string(&pi->mount.fstype, fstype);
+	return true;
+}
+
+static bool
+wormhole_path_info_set_mount_device(wormhole_path_info_t *pi, const char *device)
+{
+	if (pi->type != WORMHOLE_PATH_TYPE_MOUNT) {
+		log_error("%s: path %s is not a mount point", __func__, pi->path);
+		return false;
+	}
+
+	set_string(&pi->mount.device, device);
+	return true;
+}
+
+static bool
+wormhole_path_info_set_mount_options(wormhole_path_info_t *pi, const char *options)
+{
+	if (pi->type != WORMHOLE_PATH_TYPE_MOUNT) {
+		log_error("%s: path %s is not a mount point", __func__, pi->path);
+		return false;
+	}
+
+	set_string(&pi->mount.options, options);
+	return true;
 }
 
 /*
@@ -493,24 +535,87 @@ wormhole_config_process_profile(struct wormhole_config *cfg, struct parser_state
 }
 
 /*
- * overlay path directive
+ * Simple path directive (bind, overlay etc)
  */
-static bool
-__wormhole_config_layer_add_path(struct wormhole_layer_config *layer, const char *kwd, int type, struct parser_state *ps)
+static wormhole_path_info_t *
+___wormhole_config_layer_add_path(struct wormhole_layer_config *layer, const char *kwd, int type, struct parser_state *ps)
 {
 	wormhole_path_info_t *pi;
+	const char *path;
 
 	pi = wormhole_layer_config_add_path(layer, type, NULL);
 
-	if (!__wormhole_config_process_string(kwd, &pi->path, ps))
-		return false;
-
-	if (pi->path == NULL || pi->path[0] != '/') {
-		parser_error(ps, "%s: invalid path \"%s\" - must specify an absolute path name", kwd, pi->path);
-		return false;
+	path = parser_next_word(ps);
+	if (path == NULL) {
+		parser_error(ps, "missing path argument to %s directive", kwd);
+		return NULL;
 	}
 
-	return true;
+	if (path == NULL || path[0] != '/') {
+		parser_error(ps, "%s: invalid path \"%s\" - must specify an absolute path name", kwd, path);
+		return NULL;
+	}
+
+	set_string(&pi->path, path);
+	return pi;
+}
+
+static bool
+__wormhole_config_layer_add_path(struct wormhole_layer_config *layer, const char *kwd, int type, struct parser_state *ps)
+{
+	if (___wormhole_config_layer_add_path(layer, kwd, type, ps) == NULL)
+		return false;
+
+	return parser_expect_end_of_line(ps, kwd);
+}
+
+static bool
+__wormhole_config_layer_add_mount(struct wormhole_layer_config *layer, const char *kwd, struct parser_state *ps)
+{
+	wormhole_path_info_t *pi;
+	const char *args[3];
+	unsigned int nargs = 0;
+	bool ok = false;
+
+	pi = ___wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_MOUNT, ps);
+	if (pi == NULL)
+		return false;
+
+	for (nargs = 0; nargs < 3; ++nargs) {
+		const char *arg;
+
+		if (!(arg = parser_next_word(ps)))
+			break;
+
+		args[nargs] = arg;
+	}
+
+	switch (nargs) {
+	case 0:
+		log_error("Missing argument(s) to %s directive", kwd);
+		return false;
+
+	case 1:
+		ok = wormhole_path_info_set_mount_fstype(pi, args[0]);
+		break;
+
+	case 2:
+		ok = wormhole_path_info_set_mount_fstype(pi, args[0])
+		  && wormhole_path_info_set_mount_options(pi, args[1]);
+		break;
+
+	case 3:
+		ok = wormhole_path_info_set_mount_fstype(pi, args[0])
+		  && wormhole_path_info_set_mount_device(pi, args[1])
+		  && wormhole_path_info_set_mount_options(pi, args[2]);
+		break;
+
+	default:
+		log_error("Too many argument(s) to %s directive", kwd);
+		break;
+	}
+
+	return ok && parser_expect_end_of_line(ps, kwd);
 }
 
 /*
@@ -558,6 +663,8 @@ __wormhole_config_overlay_directive(void *block_obj, const char *kwd, struct par
 		return __wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_OVERLAY, ps);
 	if (!strcmp(kwd, "overlay-children"))
 		return __wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN, ps);
+	if (!strcmp(kwd, "mount"))
+		return __wormhole_config_layer_add_mount(layer, kwd, ps);
 	if (!strcmp(kwd, "wormhole"))
 		return __wormhole_config_layer_add_path(layer, kwd, WORMHOLE_PATH_TYPE_WORMHOLE, ps);
 

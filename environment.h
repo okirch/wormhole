@@ -30,12 +30,21 @@ enum {
 	WORMHOLE_PATH_TYPE_BIND_CHILDREN,
 	WORMHOLE_PATH_TYPE_OVERLAY,
 	WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN,
+	WORMHOLE_PATH_TYPE_MOUNT,
 	WORMHOLE_PATH_TYPE_WORMHOLE,
 };
 
 typedef struct wormhole_path_info {
 	int			type;
 	char *			path;
+
+	union {
+		struct {
+			char *	fstype;
+			char *	device;
+			char *	options;
+		} mount;
+	};
 } wormhole_path_info_t;
 
 

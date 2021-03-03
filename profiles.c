@@ -378,6 +378,8 @@ pathinfo_type_string(int type)
 		return "OVERLAY";
 	case WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN:
 		return "OVERLAY_CHILDREN";
+	case WORMHOLE_PATH_TYPE_MOUNT:
+		return "MOUNT";
 	case WORMHOLE_PATH_TYPE_WORMHOLE:
 		return "WORMHOLE";
 	}
