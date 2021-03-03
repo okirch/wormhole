@@ -86,6 +86,9 @@ extern bool			fsutil_mount_overlay(const char *lowerdir,
 extern bool			fsutil_mount_tmpfs(const char *where);
 extern bool			fsutil_mount_bind(const char *source,
 					const char *target, bool recursive);
+extern bool			fsutil_mount_virtual_fs(const char *where,
+					const char *fstype,
+					const char *options);
 extern bool			fsutil_lazy_umount(const char *path);
 extern bool			fsutil_make_fs_private(const char *dir);
 

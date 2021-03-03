@@ -871,6 +871,21 @@ fsutil_mount_bind(const char *source, const char *target, bool recursive)
 }
 
 bool
+fsutil_mount_virtual_fs(const char *where, const char *fstype, const char *options)
+{
+	int flags = 0;
+
+	trace("Mounting %s at %s\n", fstype, where);
+	if (mount(fstype, where, fstype, flags, options) < 0) {
+		log_error("Unable to mount %s file system to %s: %m", fstype, where);
+		return false;
+	}
+
+	trace2("mounted %s to %s", fstype, where);
+	return true;
+}
+
+bool
 fsutil_mount_tmpfs(const char *where)
 {
 	trace("Mounting tmpfs at %s\n", where);
