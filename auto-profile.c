@@ -191,7 +191,7 @@ dump_config(FILE *fp, const char *env_name, struct wormhole_layer_config *output
 	bool ok = true;
 
 	fprintf(fp, "environment %s {\n", env_name);
-	fprintf(fp, "\toverlay {\n");
+	fprintf(fp, "\tdefine-layer {\n");
 
 	fprintf(fp, "\t\tdirectory %s\n", output->directory);
 	fprintf(fp, "\n");
