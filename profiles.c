@@ -806,9 +806,6 @@ wormhole_layer_setup(wormhole_environment_t *env, const struct wormhole_layer_co
 	bool ok = true;
 	unsigned int i;
 
-	if (layer->npaths == 0)
-		return true;
-
 	if (layer->image) {
 		/* The overlay is provided via a container image. */
 		overlay_root = overlay_container_mount(env, layer->image);
@@ -820,7 +817,18 @@ wormhole_layer_setup(wormhole_environment_t *env, const struct wormhole_layer_co
 		overlay_root = layer->directory;
 	}
 
-	scaffold.source_dir = overlay_root;
+	if (layer->type == WORMHOLE_LAYER_TYPE_IMAGE) {
+		if (env->root_directory != NULL) {
+			log_error("Unable to set up image layer: enviornment root directory already set");
+			return false;
+		}
+
+		env->root_directory = strdup(overlay_root);
+		scaffold.source_dir = NULL;
+	} else {
+		scaffold.source_dir = overlay_root;
+	}
+
 	scaffold.dest_dir = env->root_directory;
 
 	for (i = 0, pi = layer->path; ok && i < layer->npaths; ++i, ++pi) {
@@ -855,6 +863,11 @@ wormhole_environment_setup(wormhole_environment_t *env)
 
 	for (i = 0; i < env->nlayers; ++i) {
 		struct wormhole_layer_config *layer = env->layer[i];
+
+		if (i && layer->type == WORMHOLE_LAYER_TYPE_IMAGE) {
+			log_error("Environment %s specifies an image container, but it's not the bottom most layer", env->name);
+			return false;
+		}
 
 		if (!wormhole_layer_setup(env, layer))
 			return false;

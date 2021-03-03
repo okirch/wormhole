@@ -702,6 +702,21 @@ __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct
 		return true;
 	}
 
+	if (!strcmp(kwd, "define-image")) {
+		struct wormhole_layer_config *layer;
+
+		layer = wormhole_layer_config_new(env, WORMHOLE_LAYER_TYPE_IMAGE);
+		if (!wormhole_config_process_block(layer, ps, __wormhole_config_overlay_directive))
+			return false;
+
+		if ((layer->directory && layer->image)
+		 || (!layer->directory && !layer->image)) {
+			parser_error(ps, "image needs to specify exactly one of \"directory\" and \"image\"");
+			return false;
+		}
+		return true;
+	}
+
 	if (!strcmp(kwd, "use-environment")) {
 		struct wormhole_layer_config *layer;
 
@@ -903,10 +918,26 @@ dump_config(struct wormhole_config *cfg)
 		struct wormhole_layer_config *overlay;
 
 		printf("environment %s:\n", env->name);
-		for (overlay = env->overlays; overlay; overlay = overlay->next) {
+		for (overlay = env->layers; overlay; overlay = overlay->next) {
 			unsigned int i;
 
-			printf("    overlay:\n");
+			switch (overlay->type) {
+			case WORMHOLE_LAYER_TYPE_LAYER:
+				printf("    define-layer:\n");
+				break;
+
+			case WORMHOLE_LAYER_TYPE_IMAGE:
+				printf("    define-image:\n");
+				break;
+
+			case WORMHOLE_LAYER_TYPE_REFERENCE:
+				printf("    use-environment %s\n", overlay->lower_layer_name);
+				continue;
+
+			default:
+				log_fatal("dont know layer type %d", overlay->type);
+			}
+
 			if (overlay->directory)
 				printf("        directory %s\n", overlay->directory);
 			if (overlay->image)
