@@ -29,6 +29,7 @@ struct fsutil_tempdir {
 	bool		mounted;
 };
 
+extern void			strutil_set(char **var, const char *value);
 
 extern const char *		wormhole_const_basename(const char *path);
 extern const char *		wormhole_concat_argv(int argc, char **argv);

@@ -32,6 +32,7 @@
 #include "wormhole.h"
 #include "profiles.h"
 #include "config.h"
+#include "util.h"
 #include "tracing.h"
 
 struct parser_state {
@@ -60,8 +61,6 @@ static bool		parser_expect_end_of_line(struct parser_state *ps, const char *keyw
 static void		parser_error(struct parser_state *, const char *, ...);
 static void		parser_warning(struct parser_state *, const char *, ...);
 static const char *	parser_check_obsolete_keyword(struct parser_state *, const char *kwd, struct parser_obsolete_kwd *);
-
-static void		set_string(char **var, const char *s);
 
 static struct wormhole_config *__wormhole_config_new(void);
 
@@ -98,7 +97,7 @@ __wormhole_config_new(void)
 	struct wormhole_config *cfg;
 
 	cfg = calloc(1, sizeof(*cfg));
-	set_string(&cfg->client_path, WORMHOLE_CLIENT_PATH);
+	strutil_set(&cfg->client_path, WORMHOLE_CLIENT_PATH);
 	return cfg;
 }
 
@@ -118,7 +117,7 @@ wormhole_config_free(struct wormhole_config *cfg)
 		wormhole_environment_config_free(env);
 	}
 
-	set_string(&cfg->client_path, NULL);
+	strutil_set(&cfg->client_path, NULL);
 	free(cfg);
 }
 
@@ -154,10 +153,10 @@ wormhole_profile_config_new(struct wormhole_config *cfg, const char *name, struc
 void
 wormhole_profile_config_free(struct wormhole_profile_config *profile)
 {
-	set_string(&profile->name, NULL);
-	set_string(&profile->wrapper, NULL);
-	set_string(&profile->command, NULL);
-	set_string(&profile->environment, NULL);
+	strutil_set(&profile->name, NULL);
+	strutil_set(&profile->wrapper, NULL);
+	strutil_set(&profile->command, NULL);
+	strutil_set(&profile->environment, NULL);
 	free(profile);
 }
 
@@ -183,18 +182,18 @@ wormhole_layer_config_free(struct wormhole_layer_config *layer)
 	wormhole_path_info_t *pi;
 	unsigned int i;
 
-	set_string(&layer->directory, NULL);
-	set_string(&layer->image, NULL);
+	strutil_set(&layer->directory, NULL);
+	strutil_set(&layer->image, NULL);
 
 	if (layer->path) {
 		for (i = 0, pi = layer->path; i < layer->npaths; ++i, ++pi) {
-			set_string(&pi->path, NULL);
+			strutil_set(&pi->path, NULL);
 
 			switch (pi->type) {
 			case WORMHOLE_PATH_TYPE_MOUNT:
-				set_string(&pi->mount.fstype, NULL);
-				set_string(&pi->mount.device, NULL);
-				set_string(&pi->mount.options, NULL);
+				strutil_set(&pi->mount.fstype, NULL);
+				strutil_set(&pi->mount.device, NULL);
+				strutil_set(&pi->mount.options, NULL);
 				break;
 			}
 		}
@@ -235,7 +234,7 @@ wormhole_path_info_set_mount_fstype(wormhole_path_info_t *pi, const char *fstype
 		return false;
 	}
 
-	set_string(&pi->mount.fstype, fstype);
+	strutil_set(&pi->mount.fstype, fstype);
 	return true;
 }
 
@@ -247,7 +246,7 @@ wormhole_path_info_set_mount_device(wormhole_path_info_t *pi, const char *device
 		return false;
 	}
 
-	set_string(&pi->mount.device, device);
+	strutil_set(&pi->mount.device, device);
 	return true;
 }
 
@@ -259,7 +258,7 @@ wormhole_path_info_set_mount_options(wormhole_path_info_t *pi, const char *optio
 		return false;
 	}
 
-	set_string(&pi->mount.options, options);
+	strutil_set(&pi->mount.options, options);
 	return true;
 }
 
@@ -297,7 +296,7 @@ wormhole_environment_config_free(struct wormhole_environment_config *env)
 {
 	struct wormhole_layer_config *layer;
 
-	set_string(&env->name, NULL);
+	strutil_set(&env->name, NULL);
 
 	/* free all overlays */
 	while ((layer = env->layers) != NULL) {
@@ -377,7 +376,7 @@ __wormhole_config_process_string(const char *keyword, char **var, struct parser_
 		return false;
 	}
 
-	set_string(var, arg);
+	strutil_set(var, arg);
 
 	if (parser_next_word(ps) != NULL) {
 		parser_error(ps, "unexpected noise after argument to %s directive", keyword);
@@ -556,7 +555,7 @@ ___wormhole_config_layer_add_path(struct wormhole_layer_config *layer, const cha
 		return NULL;
 	}
 
-	set_string(&pi->path, path);
+	strutil_set(&pi->path, path);
 	return pi;
 }
 
@@ -896,17 +895,6 @@ parser_warning(struct parser_state *ps, const char *fmt, ...)
 /*
  * Helpers
  */
-static void
-set_string(char **var, const char *s)
-{
-	if (*var) {
-		free(*var);
-		*var = NULL;
-	}
-	if (s)
-		*var = strdup(s);
-}
-
 #ifdef TEST
 static void
 dump_config(struct wormhole_config *cfg)

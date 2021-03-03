@@ -921,3 +921,15 @@ fsutil_make_fs_private(const char *dir)
 
 	return true;
 }
+
+void
+strutil_set(char **var, const char *value)
+{
+	if (*var) {
+		free(*var);
+		*var = NULL;
+	}
+
+	if (value)
+		*var = strdup(value);
+}

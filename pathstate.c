@@ -57,29 +57,17 @@ struct wormhole_path_state_node {
 	wormhole_path_state_node_t *children;
 };
 
-static void
-__set_string(char **var, const char *value)
-{
-	if (*var) {
-		free(*var);
-		*var = NULL;
-	}
-
-	if (value)
-		*var = strdup(value);
-}
-
 static inline void
 wormhole_path_state_set_upperdir(wormhole_path_state_t *state, const char *path)
 {
-	__set_string(&state->overlay.upperdir, path);
+	strutil_set(&state->overlay.upperdir, path);
 }
 
 static inline void
 wormhole_path_state_set_mount_info(wormhole_path_state_t *state, const char *type, const char *device)
 {
-	__set_string(&state->system_mount.type, type);
-	__set_string(&state->system_mount.device, device);
+	strutil_set(&state->system_mount.type, type);
+	strutil_set(&state->system_mount.device, device);
 }
 
 static void
@@ -88,7 +76,7 @@ wormhole_path_state_clear(wormhole_path_state_t *state)
 	switch (state->state) {
 	case WORMHOLE_PATH_STATE_OVERLAY_MOUNTED:
 	case WORMHOLE_PATH_STATE_FAKE_OVERLAY_MOUNTED:
-		__set_string(&state->overlay.upperdir, NULL);
+		strutil_set(&state->overlay.upperdir, NULL);
 		break;
 	case WORMHOLE_PATH_STATE_SYSTEM_MOUNT:
 		wormhole_path_state_set_mount_info(state, NULL, NULL);
@@ -271,14 +259,14 @@ void
 wormhole_tree_state_free(wormhole_tree_state_t *tree)
 {
 	wormhole_path_state_node_free(tree->root);
-	__set_string(&tree->root_dir, NULL);
+	strutil_set(&tree->root_dir, NULL);
 	free(tree);
 }
 
 void
 wormhole_tree_state_set_root(wormhole_tree_state_t *tree, const char *root_dir)
 {
-	__set_string(&tree->root_dir, root_dir);
+	strutil_set(&tree->root_dir, root_dir);
 }
 
 const char *
