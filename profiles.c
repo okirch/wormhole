@@ -678,6 +678,25 @@ done:
 }
 
 static bool
+pathinfo_process_mount(wormhole_environment_t *env, const wormhole_path_info_t *pi,
+			const struct wormhole_scaffold *scaffold)
+{
+	const char *dest;
+
+	trace("%s(path=%s)", __func__, pi->path);
+
+	/* We check for this in the config file parsing code, so an assert is good enough here. */
+	assert(pi->path[0] == '/');
+
+	dest = wormhole_environment_path(env, pi->path);
+
+	if (!_pathinfo_mount_one(env, pi, dest))
+		return false;
+
+	return true;
+}
+
+static bool
 pathinfo_process(wormhole_environment_t *env, const wormhole_path_info_t *pi, const struct wormhole_scaffold *scaffold)
 {
 	if (pi->type == WORMHOLE_PATH_TYPE_HIDE) {
@@ -700,6 +719,9 @@ pathinfo_process(wormhole_environment_t *env, const wormhole_path_info_t *pi, co
 	case WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN:
 		return pathinfo_process_glob(env, pi, scaffold, pathinfo_overlay_children);
 #endif
+
+	case WORMHOLE_PATH_TYPE_MOUNT:
+		return pathinfo_process_mount(env, pi, scaffold);
 
 	case WORMHOLE_PATH_TYPE_WORMHOLE:
 		return pathinfo_bind_wormhole(env, pi);
