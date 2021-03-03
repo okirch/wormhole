@@ -50,6 +50,56 @@ static bool			__wormhole_profiles_configure_profiles(struct wormhole_profile_con
 static wormhole_environment_t *	wormhole_environment_new(const char *name);
 static wormhole_profile_t *	wormhole_profile_new(const char *name);
 
+struct wormhole_scaffold {
+	const char *		source_dir;
+	const char *		dest_dir;
+};
+
+static const char *
+__wormhole_scaffold_insert_prefix(const char *prefix, const char *path)
+{
+	static char pathbuf[PATH_MAX];
+
+	if (prefix == NULL)
+		return path;
+
+	snprintf(pathbuf, sizeof(pathbuf), "%s%s%s",
+			prefix,
+			(path[0] == '/'? "" : "/"),
+			path);
+	return pathbuf;
+}
+
+static const char *
+__wormhole_scaffold_strip_prefix(const char *prefix, const char *path)
+{
+	if (prefix == NULL)
+		return path;
+
+	path = fsutil_strip_path_prefix(path, prefix);
+	if (path == NULL  || *path == '\0')
+		return NULL;
+	return path;
+}
+
+static const char *
+wormhole_scaffold_source_path(const struct wormhole_scaffold *scaffold, const char *path)
+{
+	return __wormhole_scaffold_insert_prefix(scaffold->source_dir, path);
+}
+
+static const char *
+wormhole_scaffold_source_path_inverse(const struct wormhole_scaffold *scaffold, const char *path)
+{
+	return __wormhole_scaffold_strip_prefix(scaffold->source_dir, path);
+}
+
+static const char *
+wormhole_scaffold_dest_path(const struct wormhole_scaffold *scaffold, const char *path)
+{
+	return __wormhole_scaffold_insert_prefix(scaffold->dest_dir, path);
+}
+
 /*
  * Initialize our internal data structures from config
  */
@@ -421,8 +471,19 @@ _pathinfo_overlay_one(wormhole_environment_t *environment,
 }
 
 static bool
+_pathinfo_mount_one(wormhole_environment_t *environment, const wormhole_path_info_t *pi,
+			const char *dest)
+{
+	if (!fsutil_mount_virtual_fs(dest, pi->mount.fstype, pi->mount.options))
+		return false;
+
+	/* wormhole_tree_state_set_mounted(environment->tree_state, pi->mount.fstype, dest); */
+	return true;
+}
+
+static bool
 pathinfo_bind_path(wormhole_environment_t *environment, const wormhole_path_info_t *pi,
-			const char *overlay_root,
+			const struct wormhole_scaffold *scaffold,
 			const char *dest, const char *source)
 {
 	trace2("%s(%s, %s)", __func__, dest, source);
@@ -431,14 +492,17 @@ pathinfo_bind_path(wormhole_environment_t *environment, const wormhole_path_info
 
 static bool
 pathinfo_overlay_path(wormhole_environment_t *environment, const wormhole_path_info_t *pi,
-			const char *overlay_root,
+			const struct wormhole_scaffold *scaffold,
 			const char *dest, const char *source)
 {
-	char workdir[PATH_MAX];
+	char pathbuf[PATH_MAX];
+	const char *workdir;
 
 	trace2("%s(%s, %s)", __func__, dest, source);
 
-	snprintf(workdir, sizeof(workdir), "%s/work%s", overlay_root, dest);
+	snprintf(pathbuf, sizeof(pathbuf), "/work%s", dest);
+	workdir = wormhole_scaffold_source_path(scaffold, pathbuf);
+
 	if (!fsutil_makedirs(workdir, 0755)) {
 		log_error("Failed to create overlay workdir for %s at %s", dest, workdir);
 		return false;
@@ -480,7 +544,7 @@ pathinfo_create_overlay(wormhole_environment_t *environment, const char *tempdir
 
 static bool
 pathinfo_bind_children(wormhole_environment_t *environment, const wormhole_path_info_t *pi,
-		const char *overlay_root,
+		const struct wormhole_scaffold *scaffold,
 		const char *dest, const char *source)
 {
 	struct fsutil_tempdir td;
@@ -557,8 +621,8 @@ pathinfo_bind_wormhole(wormhole_environment_t *environment, const wormhole_path_
 }
 
 static bool
-pathinfo_process_glob(wormhole_environment_t *env, const wormhole_path_info_t *pi, const char *overlay_root,
-			bool (*func)(wormhole_environment_t *env, const wormhole_path_info_t *pi, const char *overlay_root, const char *dest, const char *source))
+pathinfo_process_glob(wormhole_environment_t *env, const wormhole_path_info_t *pi, const struct wormhole_scaffold *scaffold,
+			bool (*func)(wormhole_environment_t *env, const wormhole_path_info_t *pi, const struct wormhole_scaffold *scaffold, const char *dest, const char *source))
 {
 	bool retval = false;
 	char pattern[PATH_MAX];
@@ -566,11 +630,16 @@ pathinfo_process_glob(wormhole_environment_t *env, const wormhole_path_info_t *p
 	size_t n;
 	int r;
 
-	trace("pathinfo_process_glob(overlay_root=%s, path=%s)", overlay_root, pi->path);
+	trace("pathinfo_process_glob(path=%s)", pi->path);
 
 	/* We check for this in the config file parsing code, so an assert is good enough here. */
 	assert(pi->path[0] == '/');
-	snprintf(pattern, sizeof(pattern), "%s%s", overlay_root, pi->path);
+
+	/* Build the pattern to glob for.
+	 * Overlay case: $overlay_root/$path
+	 * Image case: $path
+	 */
+	strncpy(pattern, wormhole_scaffold_source_path(scaffold, pi->path), sizeof(pattern));
 
 	r = glob(pattern, GLOB_NOSORT | GLOB_NOMAGIC | GLOB_TILDE, NULL, &globbed);
 	if (r != 0) {
@@ -584,18 +653,20 @@ pathinfo_process_glob(wormhole_environment_t *env, const wormhole_path_info_t *p
 
 		source = globbed.gl_pathv[n];
 
-		/* The full path returned by glob() should start with the overlay_root.
-		 * Remove that prefix.
+		/* Get the un-prefixed path for $glob
+		 * Overlay case: Strip $overlay_root from $overlay_root/$glob
+		 * Image case: $glob
 		 */
-		if ((abs_path = fsutil_strip_path_prefix(source, overlay_root)) == NULL || *abs_path == '\0') {
+		abs_path = wormhole_scaffold_source_path_inverse(scaffold, source);
+		if (abs_path == NULL) {
 			log_error("%s: strange - glob expansion of %s returned path name %s", __func__,
 					pattern, source);
 			goto done;
 		}
 
-		dest = wormhole_environment_path(env, abs_path);
+		dest = wormhole_scaffold_dest_path(scaffold, abs_path);
 
-		if (!func(env, pi, overlay_root, dest, source))
+		if (!func(env, pi, scaffold, dest, source))
 			goto done;
 	}
 
@@ -607,7 +678,7 @@ done:
 }
 
 static bool
-pathinfo_process(wormhole_environment_t *env, const wormhole_path_info_t *pi, const char *overlay_root)
+pathinfo_process(wormhole_environment_t *env, const wormhole_path_info_t *pi, const struct wormhole_scaffold *scaffold)
 {
 	if (pi->type == WORMHOLE_PATH_TYPE_HIDE) {
 		/* hiding is not yet implemented */
@@ -615,31 +686,26 @@ pathinfo_process(wormhole_environment_t *env, const wormhole_path_info_t *pi, co
 		return false;
 	}
 
-	if (overlay_root == NULL) {
-		log_error("Environment %s: requested overlay for \"%s\", but no image or directory given", env->name, pi->path);
-		return false;
-	}
-
 	switch (pi->type) {
 	case WORMHOLE_PATH_TYPE_BIND:
-		return pathinfo_process_glob(env, pi, overlay_root, pathinfo_bind_path);
+		return pathinfo_process_glob(env, pi, scaffold, pathinfo_bind_path);
 
 	case WORMHOLE_PATH_TYPE_BIND_CHILDREN:
-		return pathinfo_process_glob(env, pi, overlay_root, pathinfo_bind_children);
+		return pathinfo_process_glob(env, pi, scaffold, pathinfo_bind_children);
 
 	case WORMHOLE_PATH_TYPE_OVERLAY:
-		return pathinfo_process_glob(env, pi, overlay_root, pathinfo_overlay_path);
+		return pathinfo_process_glob(env, pi, scaffold, pathinfo_overlay_path);
 
 #if 0
 	case WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN:
-		return pathinfo_process_glob(env, pi, overlay_root, pathinfo_overlay_children);
+		return pathinfo_process_glob(env, pi, scaffold, pathinfo_overlay_children);
 #endif
 
 	case WORMHOLE_PATH_TYPE_WORMHOLE:
 		return pathinfo_bind_wormhole(env, pi);
 
 	default:
-		log_error("Environment %s: unsupported path_info type %d", env->name, pi->type);
+		log_error("Environment %s: unsupported path_info type %s", env->name, pathinfo_type_string(pi->type));
 		return false;
 	}
 }
@@ -713,6 +779,7 @@ wormhole_layer_setup(wormhole_environment_t *env, const struct wormhole_layer_co
 {
 	const char *overlay_root;
 	const wormhole_path_info_t *pi;
+	struct wormhole_scaffold scaffold;
 	bool mounted = false;
 	bool ok = true;
 	unsigned int i;
@@ -731,10 +798,13 @@ wormhole_layer_setup(wormhole_environment_t *env, const struct wormhole_layer_co
 		overlay_root = layer->directory;
 	}
 
+	scaffold.source_dir = overlay_root;
+	scaffold.dest_dir = env->root_directory;
+
 	for (i = 0, pi = layer->path; ok && i < layer->npaths; ++i, ++pi) {
 		trace("Environment %s: pathinfo %s: %s", env->name,
 				pathinfo_type_string(pi->type), pi->path);
-		ok = pathinfo_process(env, pi, overlay_root);
+		ok = pathinfo_process(env, pi, &scaffold);
 		trace("  result: %sok", ok? "" : "not ");
 	}
 
