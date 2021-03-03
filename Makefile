@@ -104,8 +104,8 @@ $(DIGGER): $(DIGGER_OBJS) $(LIB)
 $(AUTOPROF): $(AUTOPROF_OBJS) $(LIB)
 	$(CC) $(CFLAGS) -o $@ $(AUTOPROF_OBJS) $(LINK)
 
-config-test: config.c
-	$(CC) $(CFLAGS) -o $@ -DTEST config.c $(LINK)
+config-test: config.c tracing.o
+	$(CC) $(CFLAGS) -o $@ -DTEST config.c tracing.o $(LINK)
 
 ifeq ($(wildcard .depend), .depend)
 include .depend
