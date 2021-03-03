@@ -596,6 +596,10 @@ __fsutil_ftw(const char *dir_path, int dirfd, struct stat *dir_stat, __fsutil_ft
 			}
 
 			childfd = openat(dirfd, d->d_name, O_RDONLY|O_NOCTTY|O_NONBLOCK|O_NOFOLLOW|O_DIRECTORY);
+			if (childfd < 0 && errno == EACCES && (flags & FSUTIL_FTW_OVERRIDE_OPEN_ERROR)) {
+				(void) fchmodat(dirfd, d->d_name, 0700, 0);
+				childfd = openat(dirfd, d->d_name, O_RDONLY|O_NOCTTY|O_NONBLOCK|O_NOFOLLOW|O_DIRECTORY);
+			}
 			if (childfd < 0) {
 				if (!(flags & FSUTIL_FTW_IGNORE_OPEN_ERROR)) {
 					log_error("can't open %s/%s: %m", dir_path, d->d_name);
@@ -741,7 +745,7 @@ fsutil_remove_recursively(const char *dir_path)
 	}
 
 	ok = __fsutil_ftw(dir_path, dirfd, &stb, __fsutil_remove_callback, NULL,
-			FSUTIL_FTW_ONE_FILESYSTEM | FSUTIL_FTW_DEPTH_FIRST);
+			FSUTIL_FTW_ONE_FILESYSTEM | FSUTIL_FTW_DEPTH_FIRST | FSUTIL_FTW_OVERRIDE_OPEN_ERROR);
 
 	close(dirfd);
 

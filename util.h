@@ -64,6 +64,7 @@ extern bool			fsutil_remove_recursively(const char *dir_path);
 #define FSUTIL_FTW_DEPTH_FIRST		0x0002
 #define FSUTIL_FTW_PRE_POST_CALLBACK	0x0004
 #define FSUTIL_FTW_ONE_FILESYSTEM	0x0008
+#define FSUTIL_FTW_OVERRIDE_OPEN_ERROR	0x0010
 
 /* ftw callback flags */
 #define FSUTIL_FTW_PRE_DESCENT		0x0010
