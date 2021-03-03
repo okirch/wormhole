@@ -477,7 +477,7 @@ _pathinfo_mount_one(wormhole_environment_t *environment, const wormhole_path_inf
 	if (!fsutil_mount_virtual_fs(dest, pi->mount.fstype, pi->mount.options))
 		return false;
 
-	/* wormhole_tree_state_set_mounted(environment->tree_state, pi->mount.fstype, dest); */
+	wormhole_tree_state_set_system_mount(environment->tree_state, dest, pi->mount.fstype, NULL);
 	return true;
 }
 
@@ -614,10 +614,14 @@ out:
 }
 
 static bool
-pathinfo_bind_wormhole(wormhole_environment_t *environment, const wormhole_path_info_t *pi)
+pathinfo_bind_wormhole(wormhole_environment_t *environment, const wormhole_path_info_t *pi, const struct wormhole_scaffold *scaffold)
 {
+	const char *dest;
+
 	trace2("%s(%s)", __func__, pi->path);
-	return _pathinfo_bind_one(environment, wormhole_client_path, pi->path);
+
+	dest = wormhole_scaffold_dest_path(scaffold, pi->path);
+	return _pathinfo_bind_one(environment, wormhole_client_path, dest);
 }
 
 static bool
@@ -688,7 +692,7 @@ pathinfo_process_mount(wormhole_environment_t *env, const wormhole_path_info_t *
 	/* We check for this in the config file parsing code, so an assert is good enough here. */
 	assert(pi->path[0] == '/');
 
-	dest = wormhole_environment_path(env, pi->path);
+	dest = wormhole_scaffold_dest_path(scaffold, pi->path);
 
 	if (!_pathinfo_mount_one(env, pi, dest))
 		return false;
@@ -724,7 +728,7 @@ pathinfo_process(wormhole_environment_t *env, const wormhole_path_info_t *pi, co
 		return pathinfo_process_mount(env, pi, scaffold);
 
 	case WORMHOLE_PATH_TYPE_WORMHOLE:
-		return pathinfo_bind_wormhole(env, pi);
+		return pathinfo_bind_wormhole(env, pi, scaffold);
 
 	default:
 		log_error("Environment %s: unsupported path_info type %s", env->name, pathinfo_type_string(pi->type));
