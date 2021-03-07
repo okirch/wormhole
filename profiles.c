@@ -47,7 +47,6 @@ static const char *		wormhole_client_path;
 static bool			__wormhole_profiles_configure_environments(struct wormhole_environment_config *list);
 static bool			__wormhole_profiles_configure_profiles(struct wormhole_profile_config *list);
 
-static wormhole_environment_t *	wormhole_environment_new(const char *name);
 static wormhole_profile_t *	wormhole_profile_new(const char *name);
 
 struct wormhole_scaffold {
@@ -124,7 +123,7 @@ __wormhole_environment_from_config(struct wormhole_environment_config *cfg)
 {
 	wormhole_environment_t *env;
 
-	env = wormhole_environment_new(cfg->name);
+	env = wormhole_environment_new(cfg->name, NULL);
 	env->config = cfg;
 
 	return env;
@@ -290,14 +289,22 @@ wormhole_profile_find(const char *argv0)
 	return NULL;
 }
 
-static wormhole_environment_t *
-wormhole_environment_new(const char *name)
+wormhole_environment_t *
+wormhole_environment_new(const char *name, const wormhole_environment_t *base_env)
 {
 	wormhole_environment_t *env;
 
 	env = calloc(1, sizeof(*env));
-	env->name = strdup(name);
+	if (name)
+		env->name = strdup(name);
 	env->nsfd = -1;
+
+	if (base_env) {
+		unsigned int i;
+
+		for (i = 0; i < base_env->nlayers; ++i)
+			__wormhole_environment_add_layer(env, base_env->layer[i]);
+	}
 
 	return env;
 }

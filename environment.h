@@ -116,6 +116,7 @@ extern bool			wormhole_environment_setup(wormhole_environment_t *env);
 extern bool			wormhole_environment_async_check(wormhole_environment_t *);
 extern struct wormhole_socket *	wormhole_environment_async_setup(wormhole_environment_t *, struct wormhole_profile *);
 extern wormhole_environment_t *	wormhole_environment_async_complete(pid_t pid, int status);
+extern wormhole_environment_t *	wormhole_environment_new(const char *name, const wormhole_environment_t *base_env);
 
 extern void			wormhole_environment_set_fd(wormhole_environment_t *env, int fd);
 
