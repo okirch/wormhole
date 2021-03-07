@@ -39,6 +39,7 @@ enum {
 	OPT_OVERLAY_ROOT,
 	OPT_PRIVILEGED_NAMESPACE,
 	OPT_CLEAN,
+	OPT_BIND_MOUNT_TYPE,
 };
 
 struct option wormhole_options[] = {
@@ -47,6 +48,7 @@ struct option wormhole_options[] = {
 	{ "overlay-root",	required_argument,	NULL,	OPT_OVERLAY_ROOT },
 	{ "privileged-namespace", no_argument,		NULL,	OPT_PRIVILEGED_NAMESPACE },
 	{ "clean",		no_argument,		NULL,	OPT_CLEAN },
+	{ "bind-mount-type",	required_argument,	NULL,	OPT_BIND_MOUNT_TYPE },
 	{ NULL }
 };
 
@@ -55,6 +57,8 @@ const char *		opt_base_environment = NULL;
 const char *		opt_overlay_root = NULL;
 bool			opt_privileged_namespace = false;
 bool			opt_clean = false;
+const char *		opt_bind_mount_types[64];
+unsigned int		opt_bind_mount_type_count;
 
 static bool		wormhole_digger(int argc, char **argv);
 
@@ -83,6 +87,11 @@ main(int argc, char **argv)
 
 		case OPT_CLEAN:
 			opt_clean = true;
+			break;
+
+		case OPT_BIND_MOUNT_TYPE:
+			if (opt_bind_mount_type_count < 63)
+				opt_bind_mount_types[opt_bind_mount_type_count++] = optarg;
 			break;
 
 		default:
@@ -167,8 +176,36 @@ __init_working_dir3(const char *parent_dir, const char *middle, const char *name
 }
 
 static bool
-__remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, const char *root_dir,
-			wormhole_tree_state_t *assembled_tree)
+__do_bind_mount(wormhole_environment_t *env, const char *mount_point, const char *fstype)
+{
+	char dest_dir[PATH_MAX];
+
+	/* FIXME: check if we have already mounted this FS */
+	if (access(mount_point, X_OK) < 0) {
+		trace("Ignoring %s (type %s): inaccessible to this user", mount_point, fstype);
+		return true;
+	}
+
+	trace("Trying to bind mount %s (type %s)", mount_point, fstype);
+	snprintf(dest_dir, sizeof(dest_dir), "%s%s", env->root_directory, mount_point);
+
+	if (access(dest_dir, F_OK) < 0 && errno == ENOENT) {
+		if (!fsutil_makedirs(dest_dir, 0755))
+			trace("%s does not exist, and unable to create. This won't work", dest_dir);
+	}
+
+	if (!fsutil_mount_bind(mount_point, dest_dir, true)) {
+		log_error("Failed to set up mount tree");
+		return false;
+	}
+
+	wormhole_tree_state_set_bind_mounted(env->tree_state, mount_point);
+	return true;
+}
+
+static bool
+remount_filesystems(wormhole_environment_t *env, wormhole_tree_state_t *mnt_tree,
+			const char *overlay_dir)
 {
 	/* We should use a better heuristic to identify these types of file systems. */
 	static const char *virtual_filesystems[] = {
@@ -197,10 +234,16 @@ __remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, 
 		NULL
 	};
 
+	wormhole_tree_state_t *assembled_tree = env->tree_state;
 	wormhole_tree_walker_t *walk;
 	wormhole_path_state_t *ps;
+	const char *root_dir = env->root_directory;
 	const char *mount_point;
 	unsigned int mount_index = 0;
+	bool is_image_based = false;
+
+	if (env->nlayers && env->layer[0]->type == WORMHOLE_LAYER_TYPE_IMAGE)
+		is_image_based = true;
 
 	walk = wormhole_tree_walk(mnt_tree);
 	while ((ps = wormhole_tree_walk_next(walk, &mount_point)) != NULL) {
@@ -217,17 +260,15 @@ __remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, 
 		fstype = ps->system_mount.type;
 
 		if (strutil_string_in_list(fstype, virtual_filesystems)) {
-			char dest_dir[PATH_MAX];
-
-			trace("Trying to bind mount virtual FS %s (type %s)", mount_point, fstype);
-			snprintf(dest_dir, sizeof(dest_dir), "%s%s", root_dir, mount_point);
-			if (!fsutil_mount_bind(mount_point, dest_dir, true)) {
-				log_error("Failed to set up mount tree");
+			if (!__do_bind_mount(env, mount_point, fstype))
 				return false;
-			}
-			wormhole_tree_walk_skip_children(walk);
 
-			wormhole_tree_state_set_bind_mounted(assembled_tree, mount_point);
+			wormhole_tree_walk_skip_children(walk);
+		} else if (strutil_string_in_list(fstype, opt_bind_mount_types)) {
+			if (!__do_bind_mount(env, mount_point, fstype))
+				return false;
+
+			wormhole_tree_walk_skip_children(walk);
 		} else if (strutil_string_in_list(fstype, no_overlay_filesystems)) {
 			trace("Ignoring %s, file system type %s does not support overlays", mount_point, fstype);
 		} else if (fsutil_check_path_prefix(overlay_dir, mount_point)) {
@@ -237,6 +278,11 @@ __remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, 
 		} else {
 			char subtree_dir[PATH_MAX];
 			char upper_dir[PATH_MAX], work_dir[PATH_MAX], dest_dir[PATH_MAX];
+
+			if (is_image_based) {
+				trace("Ignoring system mount %s (%s; device %s)", mount_point, fstype, ps->system_mount.device);
+				continue;
+			}
 
 			trace("Trying to overlay %s (type %s; originally from %s)", mount_point, fstype, ps->system_mount.device);
 			snprintf(subtree_dir, sizeof(subtree_dir), "%s/subtree.%u", overlay_dir, mount_index++);
@@ -260,25 +306,19 @@ __remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, 
 	return true;
 }
 
-static wormhole_tree_state_t *
-remount_filesystems(wormhole_tree_state_t *mnt_tree, const char *overlay_dir, const char *root_dir)
+bool
+smoke_and_mirrors(wormhole_environment_t *env, const char *overlay_dir)
 {
-	wormhole_tree_state_t *assembled_tree;
-
-	assembled_tree = wormhole_tree_state_new();
-	if (!__remount_filesystems(mnt_tree, overlay_dir, root_dir, assembled_tree)) {
-		wormhole_tree_state_free(assembled_tree);
-		return NULL;
-	}
-	return assembled_tree;
-}
-
-wormhole_tree_state_t *
-smoke_and_mirrors(const char *overlay_dir)
-{
+	const char *image_root_dir = env->root_directory;
 	char lower_dir[PATH_MAX], upper_dir[PATH_MAX], work_dir[PATH_MAX], root_dir[PATH_MAX];
 	wormhole_tree_state_t *mnt_tree;
-	wormhole_tree_state_t *assembled_tree;
+
+	if (image_root_dir == NULL
+	 && env->nlayers
+	 && env->layer[0]->type == WORMHOLE_LAYER_TYPE_IMAGE) {
+		image_root_dir = env->layer[0]->directory;
+		strutil_set(&env->orig_root_directory, image_root_dir);
+	}
 
 	mnt_tree = wormhole_get_mount_state(NULL);
 
@@ -286,29 +326,37 @@ smoke_and_mirrors(const char *overlay_dir)
 	 || !__init_working_dir(overlay_dir, "tree", upper_dir, sizeof(upper_dir))
 	 || !__init_working_dir(overlay_dir, "work", work_dir, sizeof(work_dir))
 	 || !__init_working_dir(overlay_dir, "root", root_dir, sizeof(root_dir)))
-		return NULL;
+		return false;
 
 	/* User namespaces are a bit weird. This is the only way I got this to work. */
-	if (!fsutil_mount_bind("/", lower_dir, true))
-		return NULL;
+	if (image_root_dir == NULL)
+		image_root_dir = "/";
+	if (!fsutil_mount_bind(image_root_dir, lower_dir, true))
+		return false;
 
 	if (!fsutil_mount_overlay(lower_dir, upper_dir, work_dir, root_dir))
-		return NULL;
+		return false;
 
+	trace("overlay mounted at %s", root_dir);
 	if (!fsutil_lazy_umount(lower_dir))
-		return NULL;
+		return false;
 
-	assembled_tree = remount_filesystems(mnt_tree, overlay_dir, root_dir);
-	if (assembled_tree == NULL) {
-		log_error("Failed to set up file system hierarchy");
-		return NULL;
+	/* root_dir becomes the new image root for this environment. */
+	wormhole_environment_set_root_directory(env, root_dir);
+
+	if (!wormhole_environment_setup(env)) {
+		log_error("%s: failed to set up environment", __func__);
+		return false;
 	}
 
-	/* Tell the caller where to find the assembled tree */
-	wormhole_tree_state_set_root(assembled_tree, root_dir);
+	// XXX do not remount these yet, defer until later and let the caller do that
+	if (!remount_filesystems(env, mnt_tree, overlay_dir)) {
+		log_error("Failed to set up file system hierarchy");
+		return false;
+	}
 
 	wormhole_tree_state_free(mnt_tree);
-	return assembled_tree;
+	return true;
 }
 
 static bool
@@ -409,6 +457,7 @@ bool
 wormhole_digger(int argc, char **argv)
 {
 	char *shell_argv[] = { "/bin/bash", NULL };
+	wormhole_environment_t *env = NULL;
 	wormhole_tree_state_t *assembled_tree;
 	const char *root_dir;
 
@@ -460,26 +509,24 @@ wormhole_digger(int argc, char **argv)
 
 	if (opt_base_environment != 0) {
 		/* Set up base environment */
-		wormhole_environment_t *env = NULL;
-
                 if ((env = wormhole_environment_find(opt_base_environment)) == NULL) {
 			log_error("Unknown environment %s", opt_base_environment);
 			return false;
 		}
 
-		if (!wormhole_environment_setup(env)) {
-			log_error("Failed to set up base environment %s", opt_base_environment);
-			return false;
-		}
+		env = wormhole_environment_new("digger", env);
+	} else {
+		env = wormhole_environment_new("digger", NULL);
 	}
 
-	assembled_tree = smoke_and_mirrors(opt_overlay_root);
-	if (assembled_tree == NULL) {
+	if (!smoke_and_mirrors(env, opt_overlay_root)) {
 		log_error("unable to set up transparent overlay");
 		return false;
 	}
 
-	root_dir = wormhole_tree_state_get_root(assembled_tree);
+	assembled_tree = env->tree_state;
+	root_dir = env->root_directory;
+
 	if (!wormhole_digger_build(argv, root_dir)) {
 		log_error("failed to build environment");
 		return false;
