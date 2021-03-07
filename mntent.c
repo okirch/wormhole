@@ -28,15 +28,28 @@
 #include "environment.h"
 #include "util.h"
 
-wormhole_tree_state_t *
-wormhole_get_mount_state(const char *mtab)
+static wormhole_tree_state_t *
+__wormhole_get_mount_state(const char *mtab, const char *root_dir)
 {
 	wormhole_tree_state_t *tree;
 	FILE *mf;
 	struct mntent *m;
+	char root_path_buf[PATH_MAX];
 
 	if (mtab == NULL)
 		mtab = "/proc/mounts";
+
+	if (root_dir) {
+		const char *resolved_root;
+
+		resolved_root = realpath(root_dir, root_path_buf);
+		if (resolved_root == NULL) {
+			log_error("realname(%s) failed: %m", root_dir);
+			return NULL;
+		}
+
+		root_dir = resolved_root;
+	}
 
 	if ((mf = setmntent(mtab, "r")) == NULL) {
 		log_error("Unable to open %s: %m", mtab);
@@ -46,7 +59,19 @@ wormhole_get_mount_state(const char *mtab)
 	tree = wormhole_tree_state_new();
 
 	while ((m = getmntent(mf)) != NULL) {
-		wormhole_tree_state_set_system_mount(tree, m->mnt_dir, m->mnt_type, m->mnt_fsname);
+		const char *mount_point = m->mnt_dir;
+
+		if (root_dir) {
+			const char *relative_path;
+
+			relative_path = fsutil_strip_path_prefix(mount_point, root_dir);
+			if (relative_path == NULL) {
+				trace("%s is not below %s", m->mnt_dir, root_dir);
+				continue;
+			}
+			mount_point = relative_path;
+		}
+		wormhole_tree_state_set_system_mount(tree, mount_point, m->mnt_type, m->mnt_fsname);
 	}
 
 	endmntent(mf);
@@ -54,3 +79,8 @@ wormhole_get_mount_state(const char *mtab)
 	return tree;
 }
 
+wormhole_tree_state_t *
+wormhole_get_mount_state(const char *mtab)
+{
+	return __wormhole_get_mount_state(mtab, NULL);
+}
