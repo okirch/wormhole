@@ -310,6 +310,17 @@ wormhole_environment_new(const char *name, const wormhole_environment_t *base_en
 }
 
 void
+wormhole_environment_set_root_directory(wormhole_environment_t *env, const char *root_dir)
+{
+	trace("Environment \"%s\": setting root to %s", env->name, root_dir);
+
+	if (env->root_directory != NULL)
+		strutil_set(&env->orig_root_directory, env->root_directory);
+
+	strutil_set(&env->root_directory, root_dir);
+}
+
+void
 wormhole_environment_set_fd(wormhole_environment_t *env, int fd)
 {
 	if (env->nsfd >= 0) {
@@ -834,7 +845,7 @@ wormhole_layer_setup(wormhole_environment_t *env, const struct wormhole_layer_co
 			return false;
 		}
 
-		env->root_directory = strdup(overlay_root);
+		wormhole_environment_set_root_directory(env, overlay_root);
 		scaffold.source_dir = NULL;
 	} else {
 		scaffold.source_dir = overlay_root;
