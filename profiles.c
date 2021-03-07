@@ -840,12 +840,21 @@ wormhole_layer_setup(wormhole_environment_t *env, const struct wormhole_layer_co
 	}
 
 	if (layer->type == WORMHOLE_LAYER_TYPE_IMAGE) {
-		if (env->root_directory != NULL) {
+		if (env->root_directory == NULL) {
+			wormhole_environment_set_root_directory(env, overlay_root);
+		} else
+		if (strutil_equal(env->root_directory, overlay_root)
+		 || strutil_equal(env->orig_root_directory, overlay_root)) {
+			/* Someone (most likely wormhole-digger) set up an alternative root
+			 * based on the image root. */
+		} else {
 			log_error("Unable to set up image layer: enviornment root directory already set");
+			trace("  root directory %s", env->root_directory);
+			if (env->orig_root_directory)
+				trace("  original root directory %s", env->orig_root_directory);
 			return false;
 		}
 
-		wormhole_environment_set_root_directory(env, overlay_root);
 		scaffold.source_dir = NULL;
 	} else {
 		scaffold.source_dir = overlay_root;
