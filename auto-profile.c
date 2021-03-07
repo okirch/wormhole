@@ -817,7 +817,7 @@ wormhole_auto_profile(const char *root_path)
 		return 1;
 
 	if ((env_name = opt_environment_name) == NULL)
-		env_name = wormhole_const_basename(root_path);
+		env_name = pathutil_const_basename(root_path);
 
 	if (opt_output != NULL && strcmp(opt_output, "-")) {
 		if (!strcmp(opt_output, "auto"))

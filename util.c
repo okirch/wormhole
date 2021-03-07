@@ -80,7 +80,7 @@ wormhole_concat_argv(int argc, char **argv)
 }
 
 const char *
-wormhole_const_basename(const char *path)
+pathutil_const_basename(const char *path)
 {
 	const char *s;
 

@@ -276,7 +276,7 @@ wormhole_profile_find(const char *argv0)
 	/* If the above failed, fall back to the original default behavior, which
 	 * is to look for a profile that matches the basename of the path provided. */
 
-	name = wormhole_const_basename(argv0);
+	name = pathutil_const_basename(argv0);
 	if (name == NULL || *name == '\0') {
 		log_error("Cannot detect basename of executable");
 		return NULL;

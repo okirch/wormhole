@@ -29,9 +29,7 @@ struct fsutil_tempdir {
 	bool		mounted;
 };
 
-extern void			strutil_set(char **var, const char *value);
-
-extern const char *		wormhole_const_basename(const char *path);
+extern const char *		pathutil_const_basename(const char *path);
 extern const char *		wormhole_concat_argv(int argc, char **argv);
 extern char *			wormhole_command_path(const char *argv0);
 extern const char *		pathutil_dirname(const char *path);
@@ -96,6 +94,7 @@ extern bool			fsutil_make_fs_private(const char *dir);
 
 extern bool			strutil_equal(const char *s1, const char *s2);
 extern bool			strutil_string_in_list(const char *needle, const char **haystack);
+extern void			strutil_set(char **var, const char *value);
 
 enum {
 	FSUTIL_MISMATCH_TYPE = -2,
