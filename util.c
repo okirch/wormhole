@@ -933,3 +933,12 @@ strutil_set(char **var, const char *value)
 	if (value)
 		*var = strdup(value);
 }
+
+bool
+strutil_equal(const char *s1, const char *s2)
+{
+	if (!s1 || !s2)
+		return s1 == s2;
+
+	return !strcmp(s1, s2);
+}
