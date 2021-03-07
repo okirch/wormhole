@@ -30,6 +30,7 @@
 #include "wormhole.h"
 #include "tracing.h"
 #include "environment.h"
+#include "util.h"
 
 #undef DEBUG_PATHSTATE
 
