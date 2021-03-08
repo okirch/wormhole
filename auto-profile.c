@@ -43,6 +43,8 @@ enum {
 	OPT_ENVIRONMENT_NAME,
 	OPT_OUTPUT_FILE,
 	OPT_PROFILE,
+	OPT_REQUIRES,
+	OPT_PROVIDES,
 };
 
 struct option wormhole_options[] = {
@@ -55,6 +57,8 @@ struct option wormhole_options[] = {
 	{ "environment-name",	required_argument,	NULL,	OPT_ENVIRONMENT_NAME },
 	{ "output-file",	required_argument,	NULL,	OPT_OUTPUT_FILE },
 	{ "profile",		required_argument,	NULL,	OPT_PROFILE },
+	{ "requires",		required_argument,	NULL,	OPT_REQUIRES },
+	{ "provides",		required_argument,	NULL,	OPT_PROVIDES },
 
 	/* obsolete/internal */
 	{ "create-exclude-list",required_argument,	NULL,	'X' },
@@ -68,6 +72,8 @@ const char *		opt_output = NULL;
 const char *		opt_profile = "default";
 const char *		opt_exclude_file = NULL;
 bool			opt_quiet = false;
+struct strutil_array	opt_provides;
+struct strutil_array	opt_requires;
 
 static int		wormhole_auto_profile(const char *);
 static void		usage(int exval);
@@ -104,6 +110,14 @@ main(int argc, char **argv)
 
 		case OPT_PROFILE:
 			opt_profile = optarg;
+			break;
+
+		case OPT_REQUIRES:
+			strutil_array_append(&opt_requires, optarg);
+			break;
+
+		case OPT_PROVIDES:
+			strutil_array_append(&opt_provides, optarg);
 			break;
 
 		case OPT_OUTPUT_FILE:
@@ -232,6 +246,14 @@ dump_config(FILE *fp, const char *env_name, struct wormhole_layer_config *output
 	bool ok = true;
 
 	fprintf(fp, "environment %s {\n", env_name);
+
+	for (i = 0; i < opt_provides.count; ++i)
+		fprintf(fp, "\tprovides %s\n", opt_provides.data[i]);
+	for (i = 0; i < opt_requires.count; ++i)
+		fprintf(fp, "\trequires %s\n", opt_requires.data[i]);
+	if (opt_provides.count || opt_requires.count)
+		fprintf(fp, "\n");
+
 	fprintf(fp, "\tdefine-layer {\n");
 
 	fprintf(fp, "\t\tdirectory %s\n", output->directory);
