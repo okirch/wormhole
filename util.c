@@ -192,25 +192,32 @@ procutil_fork_with_socket(int *fdp)
 	return pid;
 }
 
-bool
-procutil_exec_command_argv(const char *command, char **argv, const char *root_dir)
+void
+procutil_command_init(struct procutil_command *cmd, char **argv)
 {
-	if (root_dir) {
-		if (chroot(root_dir) < 0) {
-			log_error("Unable to chroot to %s: %m", root_dir);
+	memset(cmd, 0, sizeof(*cmd));
+	cmd->argv = argv;
+}
+
+bool
+procutil_command_exec(struct procutil_command *cmd, const char *command)
+{
+	if (cmd->root_directory) {
+		if (chroot(cmd->root_directory) < 0) {
+			log_error("Unable to chroot to %s: %m", cmd->root_directory);
 			exit(67);
 		}
 		chdir("/");
 	}
 
-	execvp(command, argv);
+	execvp(command, cmd->argv);
 
 	log_error("Unable to execute %s: %m", command);
 	exit(66);
 }
 
 bool
-procutil_run_command_argv(char **argv, const char *root_dir, int *status_ret)
+procutil_command_run(struct procutil_command *cmd, int *status_ret)
 {
 	int status;
 	pid_t pid;
@@ -221,7 +228,7 @@ procutil_run_command_argv(char **argv, const char *root_dir, int *status_ret)
 	}
 
 	if (pid == 0) {
-		(void) procutil_exec_command_argv(argv[0], argv, root_dir);
+		(void) procutil_command_exec(cmd, cmd->argv[0]);
 	}
 
 	while (waitpid(pid, &status, 0) < 0) {

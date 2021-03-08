@@ -113,6 +113,7 @@ main(int argc, char **argv)
 static bool
 wormhole_digger_build(char **argv, const char *root_dir)
 {
+	struct procutil_command cmd;
 	int status;
 
 	/* Unshare the namespace so that any nonsense that happens in the subprocess we spawns
@@ -139,7 +140,10 @@ wormhole_digger_build(char **argv, const char *root_dir)
 	 * the slave tty.
 	 */
 
-	if (!procutil_run_command_argv(argv, root_dir, &status))
+	procutil_command_init(&cmd, argv);
+	cmd.root_directory = root_dir;
+
+	if (!procutil_command_run(&cmd, &status))
 		return false;
 
 	if (!procutil_child_status_okay(status)) {

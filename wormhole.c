@@ -77,11 +77,14 @@ static void
 run_command(wormhole_profile_t *profile, int argc, char **argv)
 {
 	wormhole_environment_t *env = profile->environment;
+	struct procutil_command cmd;
 
 	if (wormhole_profile_setup(profile, true) < 0)
                 log_fatal("Failed to set up environment %s", env->name);
 
 	trace("Looking good so far\n");
+	procutil_command_init(&cmd, argv);
+	cmd.root_directory = env->root_directory;
 
-	procutil_exec_command_argv(profile->config->command, argv, env->root_directory);
+	procutil_command_exec(&cmd, profile->config->command);
 }

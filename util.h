@@ -32,6 +32,11 @@ struct fsutil_tempdir {
 extern const char *		pathutil_const_basename(const char *path);
 extern const char *		pathutil_dirname(const char *path);
 
+struct procutil_command {
+	const char *	root_directory;
+	char **		argv;
+};
+
 extern const char *		procutil_concat_argv(int argc, char **argv);
 extern char *			procutil_command_path(const char *argv0);
 extern pid_t			procutil_fork_with_socket(int *fdp);
@@ -39,9 +44,10 @@ extern void			procutil_install_sigchild_handler(void);
 extern pid_t			procutil_get_exited_child(int *status);
 extern bool			procutil_child_status_okay(int status);
 extern const char *		procutil_child_status_describe(int status);
-extern bool			procutil_run_command_argv(char **argv, const char *root_dir, int *status_ret);
-extern bool			procutil_exec_command_argv(const char *command,
-					char **argv, const char *root_dir);
+
+extern void			procutil_command_init(struct procutil_command *cmd, char **argv);
+extern bool			procutil_command_run(struct procutil_command *cmd, int *status_ret);
+extern bool			procutil_command_exec(struct procutil_command *cmd, const char *argv0);
 
 extern bool			wormhole_create_namespace(void);
 extern bool			wormhole_create_user_namespace(void);
