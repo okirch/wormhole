@@ -332,6 +332,7 @@ wormhole_environment_make_command(wormhole_environment_t *env, struct procutil_c
 {
 	procutil_command_init(cmd, argv);
 	cmd->root_directory = env->root_directory;
+	cmd->working_directory = env->working_directory;
 	return true;
 }
 
