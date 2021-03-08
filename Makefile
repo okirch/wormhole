@@ -57,7 +57,9 @@ AUTOPROF_OBJS	= $(AUTOPROF_SRCS:.c=.o)
 LINK		= -lutil
 LIB		= 
 
-#MAN1PAGES	= wormhole.1
+MAN1PAGES	= wormhole.1 \
+		  wormhole-digger.1 \
+		  wormhole-autoprofile.1
 #MAN5PAGES	= wormhole.conf.5
 #MAN8PAGES	= wormholed.8
 
