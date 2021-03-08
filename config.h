@@ -21,6 +21,8 @@
 #ifndef _WORMHOLE_CONFIG_H
 #define _WORMHOLE_CONFIG_H
 
+#include "types.h"
+
 struct wormhole_profile_config {
 	struct wormhole_profile_config *next;
 
@@ -56,11 +58,15 @@ struct wormhole_environment_config {
 
 	char *			name;
 
+	struct strutil_array	provides;
+	struct strutil_array	requires;
+
 	struct wormhole_layer_config *layers;
 };
 
 struct wormhole_config {
 	char *			client_path;
+
 	struct wormhole_profile_config *profiles;
 	struct wormhole_environment_config *environments;
 };

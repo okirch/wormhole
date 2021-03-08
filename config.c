@@ -272,6 +272,10 @@ __wormhole_environment_config_new(const char *name)
 
 	env = calloc(1, sizeof(*env));
 	env->name = strdup(name);
+
+	strutil_array_init(&env->provides);
+	strutil_array_init(&env->requires);
+
 	return env;
 }
 
@@ -303,6 +307,9 @@ wormhole_environment_config_free(struct wormhole_environment_config *env)
 		env->layers = layer->next;
 		wormhole_layer_config_free(layer);
 	}
+
+	strutil_array_destroy(&env->provides);
+	strutil_array_destroy(&env->requires);
 
 	free(env);
 }
@@ -377,6 +384,27 @@ __wormhole_config_process_string(const char *keyword, char **var, struct parser_
 	}
 
 	strutil_set(var, arg);
+
+	if (parser_next_word(ps) != NULL) {
+		parser_error(ps, "unexpected noise after argument to %s directive", keyword);
+		return false;
+	}
+
+	return true;
+}
+
+static bool
+__wormhole_config_process_array_element(const char *keyword, struct strutil_array *array, struct parser_state *ps)
+{
+	const char *value;
+
+	value = parser_next_word(ps);
+	if (value == NULL) {
+		parser_error(ps, "missing argument to %s directive", keyword);
+		return false;
+	}
+
+	strutil_array_append(array, value);
 
 	if (parser_next_word(ps) != NULL) {
 		parser_error(ps, "unexpected noise after argument to %s directive", keyword);
@@ -725,6 +753,12 @@ __wormhole_config_environment_directive(void *block_obj, const char *kwd, struct
 
 		return true;
 	}
+
+	if (!strcmp(kwd, "provides"))
+		return __wormhole_config_process_array_element(kwd, &env->provides, ps);
+
+	if (!strcmp(kwd, "requires"))
+		return __wormhole_config_process_array_element(kwd, &env->requires, ps);
 
 	parser_error(ps, "unexpected keyword \"%s\" in environment block", kwd);
 	return false;
