@@ -51,6 +51,7 @@ struct option wormhole_options[] = {
 	{ "quiet",		no_argument,		NULL,	'q' },
 	{ "base-environment",	required_argument,	NULL,	OPT_BASE_ENVIRONMENT },
 	{ "overlay-root",	required_argument,	NULL,	OPT_OVERLAY_ROOT },
+	{ "overlay-directory",	required_argument,	NULL,	OPT_OVERLAY_ROOT },
 	{ "environment-name",	required_argument,	NULL,	OPT_ENVIRONMENT_NAME },
 	{ "output-file",	required_argument,	NULL,	OPT_OUTPUT_FILE },
 	{ "profile",		required_argument,	NULL,	OPT_PROFILE },

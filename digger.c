@@ -49,6 +49,7 @@ struct option wormhole_options[] = {
 	{ "debug",		no_argument,		NULL,	'd' },
 	{ "base-environment",	required_argument,	NULL,	OPT_BASE_ENVIRONMENT },
 	{ "overlay-root",	required_argument,	NULL,	OPT_OVERLAY_ROOT },
+	{ "overlay-directory",	required_argument,	NULL,	OPT_OVERLAY_ROOT },
 	{ "privileged-namespace", no_argument,		NULL,	OPT_PRIVILEGED_NAMESPACE },
 	{ "clean",		no_argument,		NULL,	OPT_CLEAN },
 	{ "bind-mount-type",	required_argument,	NULL,	OPT_BIND_MOUNT_TYPE },
@@ -548,7 +549,7 @@ wormhole_digger(int argc, char **argv)
 	const char *root_dir;
 
 	if (opt_overlay_root == NULL) {
-		log_error("Please specify a root directory via --overlay-root");
+		log_error("Please specify a root directory via --overlay-directory");
 		return false;
 	}
 

@@ -33,7 +33,7 @@ place the result in \fB/var/tmp/wormhole-tmp\fP, using the script
 .P
 .nf
 wormhole-digger --clean --base-environment leap-img \\
-    --overlay-root /var/tmp/wormhole-tmp \\
+    --overlay-directory /var/tmp/wormhole-tmp \\
     --build-script ./build-python3-devel \\
     --build-directory $PWD/cache
 .fi
@@ -48,7 +48,7 @@ Any changes to the image file system made by the build script are
 recorded in the upper layer of the overlay file system. Once the 
 build script finishes, these changes are combined into a single
 directory tree located at the directory specified by the
-\fB\-\-overlay-root\fP option.
+\fB\-\-overlay-directory\fP option.
 .P
 In a follow-up step, it is recommended to process the overlay using
 \fBwormhole-autoprofile\fP, which analyses all changes, and creates
@@ -73,7 +73,7 @@ created on.
 For this reason, it is recommended to build layers using an
 image environment as its base.
 .TP
-.BI \-\-overlay-root " directory"
+.BI \-\-overlay-directory " directory"
 Specify the output directory of build.
 .TP
 .BI \-\-build-script " filename"
@@ -128,7 +128,6 @@ This option requires that the command is run as a privileged user.
 .SH SEE ALSO
 .BR wormhole (1),
 .BR wormhole-autoconf (1),
-.BR wormhole.conf (5),
-.BR ns-exec (1).
+.BR wormhole.conf (5).
 .SH AUTHORS
 Written by Olaf Kirch <okir@suse.com>
