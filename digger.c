@@ -180,19 +180,11 @@ __init_working_dir3(const char *parent_dir, const char *middle, const char *name
 }
 
 static bool
-__do_bind_mount(wormhole_environment_t *env, const char *mount_point, const char *fstype)
+__bind_mount_directory(wormhole_environment_t *env, const char *mount_point, const char *relative_dest_dir)
 {
 	char dest_dir[PATH_MAX];
 
-	/* FIXME: check if we have already mounted this FS */
-	if (access(mount_point, X_OK) < 0) {
-		trace("Ignoring %s (type %s): inaccessible to this user", mount_point, fstype);
-		return true;
-	}
-
-	trace("Trying to bind mount %s (type %s)", mount_point, fstype);
-	snprintf(dest_dir, sizeof(dest_dir), "%s%s", env->root_directory, mount_point);
-
+	snprintf(dest_dir, sizeof(dest_dir), "%s%s", env->root_directory, relative_dest_dir);
 	if (access(dest_dir, F_OK) < 0 && errno == ENOENT) {
 		if (!fsutil_makedirs(dest_dir, 0755))
 			trace("%s does not exist, and unable to create. This won't work", dest_dir);
@@ -205,6 +197,19 @@ __do_bind_mount(wormhole_environment_t *env, const char *mount_point, const char
 
 	wormhole_tree_state_set_bind_mounted(env->tree_state, mount_point);
 	return true;
+}
+
+static bool
+rebind_filesystem(wormhole_environment_t *env, const char *mount_point, const char *fstype)
+{
+	/* FIXME: check if we have already mounted this FS */
+	if (access(mount_point, X_OK) < 0) {
+		trace("Ignoring %s (type %s): inaccessible to this user", mount_point, fstype);
+		return true;
+	}
+
+	trace("Trying to bind mount %s (type %s)", mount_point, fstype);
+	return __bind_mount_directory(env, mount_point, mount_point);
 }
 
 static bool
@@ -264,12 +269,12 @@ remount_filesystems(wormhole_environment_t *env, wormhole_tree_state_t *mnt_tree
 		fstype = ps->system_mount.type;
 
 		if (strutil_string_in_list(fstype, virtual_filesystems)) {
-			if (!__do_bind_mount(env, mount_point, fstype))
+			if (!rebind_filesystem(env, mount_point, fstype))
 				return false;
 
 			wormhole_tree_walk_skip_children(walk);
 		} else if (strutil_string_in_list(fstype, opt_bind_mount_types)) {
-			if (!__do_bind_mount(env, mount_point, fstype))
+			if (!rebind_filesystem(env, mount_point, fstype))
 				return false;
 
 			wormhole_tree_walk_skip_children(walk);
