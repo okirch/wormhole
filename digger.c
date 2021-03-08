@@ -40,6 +40,7 @@ enum {
 	OPT_PRIVILEGED_NAMESPACE,
 	OPT_CLEAN,
 	OPT_BIND_MOUNT_TYPE,
+	OPT_BUILD_DIRECTORY,
 };
 
 struct option wormhole_options[] = {
@@ -49,6 +50,7 @@ struct option wormhole_options[] = {
 	{ "privileged-namespace", no_argument,		NULL,	OPT_PRIVILEGED_NAMESPACE },
 	{ "clean",		no_argument,		NULL,	OPT_CLEAN },
 	{ "bind-mount-type",	required_argument,	NULL,	OPT_BIND_MOUNT_TYPE },
+	{ "build-directory",	required_argument,	NULL,	OPT_BUILD_DIRECTORY },
 	{ NULL }
 };
 
@@ -57,6 +59,7 @@ const char *		opt_base_environment = NULL;
 const char *		opt_overlay_root = NULL;
 bool			opt_privileged_namespace = false;
 bool			opt_clean = false;
+const char *		opt_build_directory = NULL;
 const char *		opt_bind_mount_types[64];
 unsigned int		opt_bind_mount_type_count;
 
@@ -92,6 +95,10 @@ main(int argc, char **argv)
 		case OPT_BIND_MOUNT_TYPE:
 			if (opt_bind_mount_type_count < 63)
 				opt_bind_mount_types[opt_bind_mount_type_count++] = optarg;
+			break;
+
+		case OPT_BUILD_DIRECTORY:
+			opt_build_directory = optarg;
 			break;
 
 		default:
@@ -531,6 +538,16 @@ wormhole_digger(int argc, char **argv)
 	if (!smoke_and_mirrors(env, opt_overlay_root)) {
 		log_error("unable to set up transparent overlay");
 		return false;
+	}
+
+	if (opt_build_directory) {
+		trace("Trying to bind mount %s to /build", opt_build_directory);
+		if (!__bind_mount_directory(env, opt_build_directory, "/build")) {
+			log_error("Failed to set up build directory");
+			return false;
+		}
+
+		wormhole_environment_set_working_directory(env, "/build");
 	}
 
 	assembled_tree = env->tree_state;
