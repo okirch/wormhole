@@ -34,6 +34,7 @@ extern const char *		pathutil_dirname(const char *path);
 
 struct procutil_command {
 	const char *	root_directory;
+	const char *	working_directory;
 	char **		argv;
 };
 

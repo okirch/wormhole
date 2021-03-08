@@ -207,7 +207,18 @@ procutil_command_exec(struct procutil_command *cmd, const char *command)
 			log_error("Unable to chroot to %s: %m", cmd->root_directory);
 			exit(67);
 		}
-		chdir("/");
+
+		if (chdir("/") < 0) {
+			log_error("Unable to chdir to new root: %m");
+			exit(68);
+		}
+	}
+
+	if (cmd->working_directory) {
+		if (chdir(cmd->working_directory) < 0) {
+			log_error("Unable to chdir to %s: %m", cmd->working_directory);
+			exit(69);
+		}
 	}
 
 	execvp(command, cmd->argv);
