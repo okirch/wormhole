@@ -45,6 +45,7 @@ enum {
 };
 
 struct option wormhole_options[] = {
+	{ "help",		no_argument,		NULL,	'h' },
 	{ "debug",		no_argument,		NULL,	'd' },
 	{ "base-environment",	required_argument,	NULL,	OPT_BASE_ENVIRONMENT },
 	{ "overlay-root",	required_argument,	NULL,	OPT_OVERLAY_ROOT },
@@ -67,14 +68,18 @@ const char *		opt_bind_mount_types[64];
 unsigned int		opt_bind_mount_type_count;
 
 static bool		wormhole_digger(int argc, char **argv);
+static void		usage(int exval);
 
 int
 main(int argc, char **argv)
 {
 	int c;
 
-	while ((c = getopt_long(argc, argv, "d", wormhole_options, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "dh", wormhole_options, NULL)) != EOF) {
 		switch (c) {
+		case 'h':
+			usage(0);
+
 		case 'd':
 			tracing_increment_level();
 			break;
@@ -109,8 +114,8 @@ main(int argc, char **argv)
 			break;
 
 		default:
-			log_error("Usage message goes here.");
-			return 2;
+			log_error("Error parsing command line");
+			usage(2);
 		}
 	}
 
@@ -122,6 +127,34 @@ main(int argc, char **argv)
 	}
 
 	return 0;
+}
+
+void
+usage(int exval)
+{
+	FILE *f = exval? stderr : stdout;
+
+	fprintf(f,
+		"Usage:\n"
+		"wormhole-digger [options] [--] [command] [args]\n"
+		"  --help, -h\n"
+		"     Display this help message\n"
+		"  --debug, -d\n"
+		"     Increase debugging verbosity\n"
+		"  --clean\n"
+		"     Clean up output directory first\n"
+		"  --privileged-namespace\n"
+		"     Create container using a regular namespace rather than a user namespace.\n"
+		"  --base-environment <name>\n"
+		"     Use <name> as the base environment for the container.\n"
+		"  --overlay-directory <dirname>\n"
+		"     Specify output directory as <dirname>.\n"
+		"  --build-directory <dirname>\n"
+		"     Mount <dirname> as /build and set the build command's working directory to it.\n"
+		"  --build-script <path>\n"
+		"     Mount <path> as /build.sh and execute this as the build command.\n"
+	);
+	exit(exval);
 }
 
 static bool
