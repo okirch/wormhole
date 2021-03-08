@@ -23,7 +23,7 @@
 
 #define WORMHOLE_SOCKET_PATH		"/var/run/wormhole.sock"
 #define WORMHOLE_AUTOPROFILE_DIR_PATH	"/etc/wormhole"
-#define WORMHOLE_CONFIG_PATH		"/etc/wormhole.conf"
+#define WORMHOLE_CONFIG_PATH		"/etc/wormhole/wormhole.conf"
 #define WORMHOLE_USER_CONFIG_PATH	"~/.wormhole/config"
 #define WORMHOLE_CLIENT_PATH		"/usr/bin/wormhole"
 
