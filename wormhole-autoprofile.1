@@ -1,0 +1,110 @@
+.\"  Copyright (C) 2020-2021 Olaf Kirch <okir@suse.de>
+.\"
+.\"  This program is free software; you can redistribute it and/or modify
+.\"  it under the terms of the GNU General Public License as published by
+.\"  the Free Software Foundation; either version 2 of the License, or
+.\"  (at your option) any later version.
+.\"
+.\"  This program is distributed in the hope that it will be useful,
+.\"  but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"  GNU General Public License for more details.
+.\"
+.\"  You should have received a copy of the GNU General Public License
+.\"  along with this program; if not, write to the Free Software
+.\"  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.TH WORMHOLE-AUTOPROFILE 1 "8 Mar 2021"
+.UC 6
+.SH NAME
+wormhole-autoprofile - utility for creating wormhole layers
+.SH SYNOPSIS
+.BR wormhole-autoprofile " [ \fIoptions\fP ...]
+.SH DESCRIPTION
+This utility can be used to automate the creation of a
+\fBwormhole.conf\fP(5) file, for example from a directory
+tree created by \fBwormhole-digger\fP(1).
+.\"
+.\"
+.\"
+.SS Usage scenarios
+Once you have created an overlay tree with a tool such as
+.BR wormhole-digger ,
+you can create a wormhole configuration file somewhat automatically
+using \fBwormhole-autoprofile\fP:
+.P
+.nf
+wormhole-autoprofile --overlay-directory /var/tmp/wormhole-tmp \\
+    --environment-name python3-devel \\
+    --output-file auto
+.fi
+.P
+This will scan the indicated overlay directory and try to
+determine which of the files and directories are relevant (and
+should hence be included in the configuration file), and which ones
+are not.
+.P
+The command is controlled by a configuration file that contains
+instructions on how to deal with certains paths. For example,
+the autoprofile configuration will typically ignore a path
+like \fB/usr/lib/sysimage/rpm\fP (containing the RPM database,
+which is irrelevant for a runtime layer), but create an overlay
+for \fB/usr/bin\fP if it contains commands that were installed
+inside the overlay.
+.P
+.SH OPTIONS
+\fBwormhole-autoprofile\fP supports the following options:
+.TP
+.BI \-\-profile " name
+The default configuration file for this utility is (unsurprisingly)
+called \fBdefault\fP and is located in
+.BR /etc/wormhole/autoprofile-default.conf .
+You can specify a different profile using the \fB\-\-profile\fP
+option. If \fIname\fP contains a directory separator, it is taken to be the
+path of a regular file containing the profile. If it does not
+contain a directory separator, the utility will attempt to load
+the profile from
+.BR /etc/wormhole/autoprofile-\fIname\fP.conf .
+.IP
+In order to build an image environment from a directory tree,
+you can invoke the command with \fB\-\-profile image\fP.
+.TP
+.BI \-\-base-environment " env-name
+For future use.
+.TP
+.BI \-\-overlay-directory " directory"
+Specify the base directory containing the overlay tree.
+A tree created by \fBwormhole-digger\fP will be rooted at a
+subdirectory named \fBtree\fP below this directory;
+\fBwormhole-autoprofile\fP will detect this.
+.TP
+.BI \-\-environment-name " name"
+Specify the name for the environment to be defined.
+.TP
+.BI \-\-output-file " path"
+Specify the output file to write the configuration to.
+.IP
+If the overlay root was created by \fBwormhole-digger\fP,
+i.e. the actual directory tree is located below the \fBtree\fP
+subdirectory, you can also specify the \fBauto\fP as output
+file. In this case, the file will be written to a file
+named \fBenviron.conf\fP inside the overlay, as a sibling
+to the \fBtree\fP directory.
+.TP
+.BI \-\-quiet
+Suppress progress messages.
+.TP
+.BR \-\-debug ", " -d
+Increase the verbosity of the command and make it print more diagnostics.
+The option can be given several times in order to increase verbosity
+(current maximum debug level is 2).
+.TP
+.BR \-\-help ", " -d
+Display a short help message.
+.SH SEE ALSO
+.BR wormhole (1),
+.BR wormhole-digger (1),
+.BR wormhole.conf (5).
+.SH AUTHORS
+Written by Olaf Kirch <okir@suse.com>
+
