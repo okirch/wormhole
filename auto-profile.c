@@ -53,7 +53,7 @@ const char *		opt_base_environment = NULL;
 const char *		opt_overlay_root = NULL;
 const char *		opt_environment_name = NULL;
 const char *		opt_output = NULL;
-const char *		opt_profile = "autoprofile-default.conf";
+const char *		opt_profile = "default";
 const char *		opt_exclude_file = NULL;
 bool			opt_quiet = false;
 
@@ -484,13 +484,22 @@ autoprofile_config_free(struct autoprofile_config *config)
 }
 
 struct autoprofile_config *
-load_autoprofile_config(const char *filename)
+load_autoprofile_config(const char *profile)
 {
+	const char *filename;
 	struct autoprofile_config *config;
 	struct action **pos;
 	FILE *fp;
+	char pathbuf[PATH_MAX];
 	char linebuf[1024];
 	unsigned int lineno = 0;
+
+	if (strchr(profile, '/') != NULL) {
+		filename = profile;
+	} else {
+		snprintf(pathbuf, sizeof(pathbuf), "%s/autoprofile-%s.conf", WORMHOLE_AUTOPROFILE_DIR_PATH, profile);
+		filename = pathbuf;
+	}
 
 	if (!(fp = fopen(filename, "r"))) {
 		log_error("Cannot open config file %s: %m", filename);
