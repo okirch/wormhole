@@ -1,0 +1,93 @@
+.\"  Copyright (C) 2020-2021 Olaf Kirch <okir@suse.de>
+.\"
+.\"  This program is free software; you can redistribute it and/or modify
+.\"  it under the terms of the GNU General Public License as published by
+.\"  the Free Software Foundation; either version 2 of the License, or
+.\"  (at your option) any later version.
+.\"
+.\"  This program is distributed in the hope that it will be useful,
+.\"  but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"  GNU General Public License for more details.
+.\"
+.\"  You should have received a copy of the GNU General Public License
+.\"  along with this program; if not, write to the Free Software
+.\"  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.ds UT \fBwormhole\fP
+.TH WORMHOLE 1 "8 Feb 2021" "Linux" "Wormhole Manual"
+.SH NAME
+wormhole - utility for wrapping applications with an overlay
+.SH SYNOPSIS
+.BR wormhole " [ \fIoptions\fP ...]
+.SH DESCRIPTION
+This utility can be used to start an application in a sort of \(dqtransparent
+container.\(dq
+The purpose of this approach is not to contain the application, so the
+name container is a bit of a misnomer in this context.
+.SH Concept
+Instead, what \*(UT tries to provide, is a method to easily
+shrink wrap applications with (most or all of its dependencies) in a way
+that isolates them from what is installed inside the host system.
+However, the approach differs from regular containers in that the
+execution context does not have its own PID, network and other namespaces,
+nor does it try to prevent the command from accessing the host file system.
+Instead, \*(UT will usually overlay those files and directories
+the application requires \fIon top of\fP the host file system, leaving
+most of \fB/etc\fP, the user's home directory, \fB/tmp\fP and other locations
+accessible to the application.
+.P
+Conceptually, the service \*(UT provides is similar to
+vendoring approaches implemented in many contemporary scripting
+languages. It differs from these that the implementation is language
+agnostic and covers shared libraries and similar artefacts.
+.P
+Typically, in order to execute a program (let's call it \fImyapp\fP)
+in this way, you have to create an overlay tree containing the
+libraries, commands and configuratiol files that make up the
+application. You also need to describe (in an overlay) how to
+create the container environment at run-time. And finally, you
+would install a symbolic link with the name of your command in a
+directory that is in your \fB$PATH\fP, pointing at \fBwormhole\P.
+.P
+When invoking \fImyapp\fP, the \*(UT is executed. By
+inspecting \fBargv[0]\fP, it detects that it was called as \fImyapp\fP.
+It will read the configuration file(s) telling it which environment
+to create, as well as the name of the actual application that lives
+inside this environment.
+.P
+\*(UT will then create a rootless container, usually as
+an overlay on top of your host file system. This will leave most
+mounted file systems still accessible from the application.
+.SH Caveats
+Currently, there is no way for an application to run shell commands
+in the host context. So, for instance, wrapping a package manager
+with \*(UT will not yield the intended results, as invoking
+the \fBrpm\fP command will cause that to run inside the container.
+.SH OPTIONS
+\*(UT does not take any command line options. The entire
+command line is passed on to the application as it is started in
+the execution environment.
+.SH ENVIRONMENT
+\*(UT honors several environment variables that allow
+the caller to influence its behaviors.
+.TP
+.B WORMHOLE_DEBUG
+If set to a numeric value, this controls the verbosity of
+debug tracing. Specifying a value of 2, for example, is equivalent
+to invoking other utilities from the \*(UT family with
+\fB\-dd\fP.
+.TP
+.B WORMHOLE_CONFIG
+Specifies an alternative location of the main configuration file.
+The default system wide location is \fB/etc/wormhole/wormhole.conf\fP.
+.IP
+If a file named \fB~/.wormhole/config\fP exists in the user's
+home directory (as determined by \fBHOME\fP), this file takes
+precedence over the system wide config file.
+.SH SEE ALSO
+.BR wormhole-digger (1),
+.BR wormhole-autoprofile (1),
+.BR wormhole.conf (5).
+.SH AUTHORS
+Written by Olaf Kirch <okir@suse.com>
