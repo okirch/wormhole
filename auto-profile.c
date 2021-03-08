@@ -37,14 +37,24 @@
 #include "config.h"
 #include "util.h"
 
+enum {
+	OPT_BASE_ENVIRONMENT,
+	OPT_OVERLAY_ROOT,
+	OPT_ENVIRONMENT_NAME,
+	OPT_OUTPUT_FILE,
+	OPT_PROFILE,
+};
+
 struct option wormhole_options[] = {
 	{ "debug",		no_argument,		NULL,	'd' },
 	{ "quiet",		no_argument,		NULL,	'q' },
-	{ "base-environment",	required_argument,	NULL,	'B' },
-	{ "overlay-root",	required_argument,	NULL,	'R' },
-	{ "environment-name",	required_argument,	NULL,	'N' },
-	{ "output-file",	required_argument,	NULL,	'O' },
-	{ "profile",		required_argument,	NULL,	'P' },
+	{ "base-environment",	required_argument,	NULL,	OPT_BASE_ENVIRONMENT },
+	{ "overlay-root",	required_argument,	NULL,	OPT_OVERLAY_ROOT },
+	{ "environment-name",	required_argument,	NULL,	OPT_ENVIRONMENT_NAME },
+	{ "output-file",	required_argument,	NULL,	OPT_OUTPUT_FILE },
+	{ "profile",		required_argument,	NULL,	OPT_PROFILE },
+
+	/* obsolete/internal */
 	{ "create-exclude-list",required_argument,	NULL,	'X' },
 	{ NULL }
 };
@@ -74,23 +84,23 @@ main(int argc, char **argv)
 			opt_quiet = true;
 			break;
 
-		case 'B':
+		case OPT_BASE_ENVIRONMENT:
 			opt_base_environment = optarg;
 			break;
 
-		case 'R':
+		case OPT_OVERLAY_ROOT:
 			opt_overlay_root = optarg;
 			break;
 
-		case 'N':
+		case OPT_ENVIRONMENT_NAME:
 			opt_environment_name = optarg;
 			break;
 
-		case 'P':
+		case OPT_PROFILE:
 			opt_profile = optarg;
 			break;
 
-		case 'O':
+		case OPT_OUTPUT_FILE:
 			opt_output = optarg;
 			break;
 
