@@ -40,6 +40,7 @@ enum {
 	OPT_PRIVILEGED_NAMESPACE,
 	OPT_CLEAN,
 	OPT_BIND_MOUNT_TYPE,
+	OPT_BUILD_SCRIPT,
 	OPT_BUILD_DIRECTORY,
 };
 
@@ -50,6 +51,7 @@ struct option wormhole_options[] = {
 	{ "privileged-namespace", no_argument,		NULL,	OPT_PRIVILEGED_NAMESPACE },
 	{ "clean",		no_argument,		NULL,	OPT_CLEAN },
 	{ "bind-mount-type",	required_argument,	NULL,	OPT_BIND_MOUNT_TYPE },
+	{ "build-script",	required_argument,	NULL,	OPT_BUILD_SCRIPT },
 	{ "build-directory",	required_argument,	NULL,	OPT_BUILD_DIRECTORY },
 	{ NULL }
 };
@@ -59,6 +61,7 @@ const char *		opt_base_environment = NULL;
 const char *		opt_overlay_root = NULL;
 bool			opt_privileged_namespace = false;
 bool			opt_clean = false;
+const char *		opt_build_script = NULL;
 const char *		opt_build_directory = NULL;
 const char *		opt_bind_mount_types[64];
 unsigned int		opt_bind_mount_type_count;
@@ -95,6 +98,10 @@ main(int argc, char **argv)
 		case OPT_BIND_MOUNT_TYPE:
 			if (opt_bind_mount_type_count < 63)
 				opt_bind_mount_types[opt_bind_mount_type_count++] = optarg;
+			break;
+
+		case OPT_BUILD_SCRIPT:
+			opt_build_script = optarg;
 			break;
 
 		case OPT_BUILD_DIRECTORY:
@@ -202,7 +209,27 @@ __bind_mount_directory(wormhole_environment_t *env, const char *mount_point, con
 		return false;
 	}
 
-	wormhole_tree_state_set_bind_mounted(env->tree_state, mount_point);
+	wormhole_tree_state_set_bind_mounted(env->tree_state, relative_dest_dir);
+	return true;
+}
+
+static bool
+__bind_mount_file(wormhole_environment_t *env, const char *source_path, const char *relative_dest_path)
+{
+	char dest_path[PATH_MAX];
+
+	snprintf(dest_path, sizeof(dest_path), "%s%s", env->root_directory, relative_dest_path);
+	if (access(dest_path, F_OK) < 0 && errno == ENOENT) {
+		if (!fsutil_create_empty(dest_path))
+			trace("%s does not exist, and unable to create. This won't work", dest_path);
+	}
+
+	if (!fsutil_mount_bind(source_path, dest_path, true)) {
+		log_error("Failed to set up mount tree");
+		return false;
+	}
+
+	wormhole_tree_state_set_bind_mounted(env->tree_state, relative_dest_path);
 	return true;
 }
 
@@ -469,20 +496,23 @@ clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 	return true;
 }
 
+static char **
+make_argv_shell(void)
+{
+	static char *shell_argv[] = { "/bin/bash", NULL };
+
+	shell_argv[0] = getenv("SHELL");
+	if (shell_argv[0] == NULL)
+		shell_argv[0] = "/bin/sh";
+	return shell_argv;
+}
+
 bool
 wormhole_digger(int argc, char **argv)
 {
-	char *shell_argv[] = { "/bin/bash", NULL };
 	wormhole_environment_t *env = NULL;
 	wormhole_tree_state_t *assembled_tree;
 	const char *root_dir;
-
-	if (argc == 0) {
-		shell_argv[0] = getenv("SHELL");
-		if (shell_argv[0] == NULL)
-			shell_argv[0] = "/bin/sh";
-		argv = shell_argv;
-	}
 
 	if (opt_overlay_root == NULL) {
 		log_error("Please specify a root directory via --overlay-root");
@@ -550,8 +580,21 @@ wormhole_digger(int argc, char **argv)
 		wormhole_environment_set_working_directory(env, "/build");
 	}
 
+	if (opt_build_script) {
+		trace("Trying to bind mount %s to /build.sh", opt_build_script);
+		if (!__bind_mount_file(env, opt_build_script, "/build.sh")) {
+			log_error("Failed to set up build script");
+			return false;
+		}
+
+		*--argv = "/build.sh";
+	}
+
 	assembled_tree = env->tree_state;
 	root_dir = env->root_directory;
+
+	if (*argv == NULL)
+		argv = make_argv_shell();
 
 	if (!wormhole_digger_build(env, argv)) {
 		log_error("failed to build environment");
@@ -574,5 +617,6 @@ wormhole_digger(int argc, char **argv)
 		return false;
 	}
 
+	printf("Combined overlay tree is now in %s\n", opt_overlay_root);
 	return true;
 }

@@ -221,6 +221,7 @@ procutil_command_exec(struct procutil_command *cmd, const char *command)
 		}
 	}
 
+	trace("Executing \"%s\"", procutil_concat_argv(-1, cmd->argv));
 	execvp(command, cmd->argv);
 
 	log_error("Unable to execute %s: %m", command);
