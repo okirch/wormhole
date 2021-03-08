@@ -115,6 +115,9 @@ struct wormhole_environment {
 	} sub_daemon;
 };
 
+/* fwd decl */
+struct procutil_command;
+
 extern wormhole_environment_t *	wormhole_environment_find(const char *name);
 extern bool			wormhole_environment_setup(wormhole_environment_t *env);
 extern bool			wormhole_environment_async_check(wormhole_environment_t *);
@@ -123,6 +126,7 @@ extern wormhole_environment_t *	wormhole_environment_async_complete(pid_t pid, i
 extern wormhole_environment_t *	wormhole_environment_new(const char *name, const wormhole_environment_t *base_env);
 extern void			wormhole_environment_set_root_directory(wormhole_environment_t *env, const char *);
 extern void			wormhole_environment_set_working_directory(wormhole_environment_t *env, const char *);
+extern bool			wormhole_environment_make_command(wormhole_environment_t *env, struct procutil_command *cmd, char **argv);
 
 extern void			wormhole_environment_set_fd(wormhole_environment_t *env, int fd);
 

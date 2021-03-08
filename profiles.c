@@ -327,6 +327,14 @@ wormhole_environment_set_working_directory(wormhole_environment_t *env, const ch
 	strutil_set(&env->working_directory, cwd);
 }
 
+bool
+wormhole_environment_make_command(wormhole_environment_t *env, struct procutil_command *cmd, char **argv)
+{
+	procutil_command_init(cmd, argv);
+	cmd->root_directory = env->root_directory;
+	return true;
+}
+
 void
 wormhole_environment_set_fd(wormhole_environment_t *env, int fd)
 {

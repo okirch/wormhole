@@ -111,7 +111,7 @@ main(int argc, char **argv)
 }
 
 static bool
-wormhole_digger_build(char **argv, const char *root_dir)
+wormhole_digger_build(wormhole_environment_t *env, char **argv)
 {
 	struct procutil_command cmd;
 	int status;
@@ -140,8 +140,8 @@ wormhole_digger_build(char **argv, const char *root_dir)
 	 * the slave tty.
 	 */
 
-	procutil_command_init(&cmd, argv);
-	cmd.root_directory = root_dir;
+	if (!wormhole_environment_make_command(env, &cmd, argv))
+		return false;
 
 	if (!procutil_command_run(&cmd, &status))
 		return false;
@@ -531,7 +531,7 @@ wormhole_digger(int argc, char **argv)
 	assembled_tree = env->tree_state;
 	root_dir = env->root_directory;
 
-	if (!wormhole_digger_build(argv, root_dir)) {
+	if (!wormhole_digger_build(env, argv)) {
 		log_error("failed to build environment");
 		return false;
 	}
