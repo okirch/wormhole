@@ -14,6 +14,7 @@
 .\"  along with this program; if not, write to the Free Software
 .\"  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 .\"
+.ds UT \fBwormhole-autoprofile\fP
 .TH WORMHOLE-AUTOPROFILE 1 "8 Mar 2021"
 .UC 6
 .SH NAME
@@ -31,7 +32,7 @@ tree created by \fBwormhole-digger\fP(1).
 Once you have created an overlay tree with a tool such as
 .BR wormhole-digger ,
 you can create a wormhole configuration file somewhat automatically
-using \fBwormhole-autoprofile\fP:
+using \*(UT:
 .P
 .nf
 wormhole-autoprofile --overlay-directory /var/tmp/wormhole-tmp \\
@@ -53,7 +54,7 @@ for \fB/usr/bin\fP if it contains commands that were installed
 inside the overlay.
 .P
 .SH OPTIONS
-\fBwormhole-autoprofile\fP supports the following options:
+\*(UT supports the following options:
 .TP
 .BI \-\-profile " name
 The default configuration file for this utility is (unsurprisingly)
@@ -76,7 +77,7 @@ For future use.
 Specify the base directory containing the overlay tree.
 A tree created by \fBwormhole-digger\fP will be rooted at a
 subdirectory named \fBtree\fP below this directory;
-\fBwormhole-autoprofile\fP will detect this.
+\*(UT will detect this.
 .TP
 .BI \-\-environment-name " name"
 Specify the name for the environment to be defined.
