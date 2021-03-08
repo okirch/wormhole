@@ -1,0 +1,134 @@
+.\"  Copyright (C) 2020-2021 Olaf Kirch <okir@suse.de>
+.\"
+.\"  This program is free software; you can redistribute it and/or modify
+.\"  it under the terms of the GNU General Public License as published by
+.\"  the Free Software Foundation; either version 2 of the License, or
+.\"  (at your option) any later version.
+.\"
+.\"  This program is distributed in the hope that it will be useful,
+.\"  but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"  GNU General Public License for more details.
+.\"
+.\"  You should have received a copy of the GNU General Public License
+.\"  along with this program; if not, write to the Free Software
+.\"  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.TH WORMHOLE-DIGGER 1 "8 Mar 2021"
+.UC 6
+.SH NAME
+wormhole-digger - utility for creating wormhole layers
+.SH SYNOPSIS
+.BR wormhole-digger " [ \fIoptions\fP ...]
+.SH DESCRIPTION
+This utility can be used to create new layers for \fBwormhole\fP. It is
+best used in combination with \fBwormhole-autoprofile\fP.
+.\"
+.\"
+.\"
+.SS Usage scenarios
+The following command will build an overlay for OpenSUSE Leap and
+place the result in \fB/var/tmp/wormhole-tmp\fP, using the script
+\fBbuild-python3-devel\fP in the current directory.
+.P
+.nf
+wormhole-digger --clean --base-environment leap-img \\
+    --overlay-root /var/tmp/wormhole-tmp \\
+    --build-script ./build-python3-devel \\
+    --build-directory $PWD/cache
+.fi
+.P
+What this does is it sets up a rootless container using an image
+called \fBleap-img\fP. The file system will be used as the lower layer
+of an overlay filesystem.
+It then bind mounts certain directories from the host file system
+(such as /proc, /sys and /tmp), and executes the specified script
+inside the specified directory.
+Any changes to the image file system made by the build script are
+recorded in the upper layer of the overlay file system. Once the 
+build script finishes, these changes are combined into a single
+directory tree located at the directory specified by the
+\fB\-\-overlay-root\fP option.
+.P
+In a follow-up step, it is recommended to process the overlay using
+\fBwormhole-autoprofile\fP, which analyses all changes, and creates
+a \fBwormhole.conf\fP(5) file for this new layer.
+.SH OPTIONS
+\fBwormhole-digger\fP supports the following options:
+.TP
+.BI \-\-base-environment " env-name
+Base the build container on the specified environment \fIenv-name\fP.
+If the base environment is an image environment, \fBwormhole-digger\fP
+creates a container whose root is an overlay filesystem using the
+root of the image (and bind mounts virtual file systems like /proc
+and /sys into this container).
+.IP
+If the base environment is a wormhole layer, \fBwormhole-digger\fP
+builds an overlay filesystem using the host file system tree as a
+base, and overlays the files and directories of \fIenv-name\fP on
+top of it. This may be useful in some scenarious, but the resulting
+layer is unlikely to be usable on hosts other than the one it was
+created on.
+.IP
+For this reason, it is recommended to build layers using an
+image environment as its base.
+.TP
+.BI \-\-overlay-root " directory"
+Specify the output directory of build.
+.TP
+.BI \-\-build-script " filename"
+Specify \fIfilename\fP as the name of the command to be executed.
+This script or command will be bind mounted as \fB/build.sh\fP inside
+the container. Any positional arguments given to
+\fBwormhole-digger\fP will be passed to this script as command
+like arguments. If the arguments contain options strings starting with
+a hyphen character, they should be separated from \fBwormhole-digger\fP
+options using the double hyphen \*dq\-\-\(dq, as in this example:
+.IP
+.nf
+.B " wormhole-digger \fIoptions\fP --build-script foobar -- --foo --bar
+.fi
+.IP
+Note, if no \fB\-\-build-script\fP option is given,
+\fBwormhole-digger\fP will take the first positional argument as
+the name of a command to be executed via \fBsystem\fP(3). If no
+positional arguments are given, it will execute an interactive
+shell.
+.TP
+.BI \-\-build-directory " directory"
+Specify \fIdirectory\fP as the working directory of the build command
+to be executed.
+This directory will be bind mounted as \fB/build\fP inside
+the container, and the child process will change its working
+directory to \fB/build\fP.
+.TP
+.BI \-\-clean
+\fBwormhole-digger\fP expects the output directory to be empty,
+and exits with an error if it is not. If the \fB\-\-clean\fP
+option is given, it will instead try to remove the directory and
+its contents if not empty.
+.TP
+.BR \-\-debug ", " -d
+Increase the verbosity of the command and make it print more diagnostics.
+The option can be given several times in order to increase verbosity
+(current maximum debug level is 2).
+.TP
+.BI \-\-privileged-namespace
+By default, \fBwormhole-digger\fP creates a user namespace for the
+container, so that the resulting container will be rootless. On a
+rootless container, files not owned by the invoking user will appear
+as if they belong to user \fBnobody\fP.
+.IP
+If \fB\-\-privileged-namespace\fP is given, a regular file system
+namespace is created that does not remap file ownership in the way
+that user namespaces do. This option should be used when installing
+files into system directories.
+.IP
+This option requires that the command is run as a privileged user.
+.SH SEE ALSO
+.BR wormhole (1),
+.BR wormhole-autoconf (1),
+.BR wormhole.conf (5),
+.BR ns-exec (1).
+.SH AUTHORS
+Written by Olaf Kirch <okir@suse.com>
