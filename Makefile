@@ -1,6 +1,6 @@
 BINDIR		= /usr/bin
 SBINDIR		= /usr/sbin
-ETCDIR		= /etc
+ETCDIR		= /etc/wormhole
 IMGDIR		= /usr/lib/sysimage/wormhole
 MAN1DIR		= /usr/share/man/man1
 MAN5DIR		= /usr/share/man/man5
@@ -46,7 +46,8 @@ DIGGER_SRCS	= digger.c \
 		  util.c
 DIGGER_OBJS	= $(DIGGER_SRCS:.c=.o)
 AUTOPROF	= wormhole-autoprofile
-AUTOPROF_CONF	= autoprofile-default.conf
+AUTOPROF_CONF	= autoprofile-default.conf \
+		  autoprofile-image.conf
 AUTOPROF_SRCS	= auto-profile.c \
 		  config.c \
 		  pathstate.c \
