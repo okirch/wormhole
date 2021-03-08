@@ -321,6 +321,13 @@ wormhole_environment_set_root_directory(wormhole_environment_t *env, const char 
 }
 
 void
+wormhole_environment_set_working_directory(wormhole_environment_t *env, const char *cwd)
+{
+	trace("Environment \"%s\": setting cwd to %s", env->name, cwd);
+	strutil_set(&env->working_directory, cwd);
+}
+
+void
 wormhole_environment_set_fd(wormhole_environment_t *env, int fd)
 {
 	if (env->nsfd >= 0) {
@@ -652,7 +659,7 @@ pathinfo_process_glob(wormhole_environment_t *env, const wormhole_path_info_t *p
 	size_t n;
 	int r;
 
-	trace("pathinfo_process_glob(path=%s)", pi->path);
+	trace("pathinfo_process_glob(path=%s)", wormhole_scaffold_source_path(scaffold, pi->path));
 
 	/* We check for this in the config file parsing code, so an assert is good enough here. */
 	assert(pi->path[0] == '/');

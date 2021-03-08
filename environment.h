@@ -97,6 +97,9 @@ struct wormhole_environment {
 	char *			root_directory;
 	char *			orig_root_directory;
 
+	/* Directory to chdir to prior to running the command. */
+	char *			working_directory;
+
 	unsigned int		nlayers;
 	struct wormhole_layer_config *layer[WORMHOLE_ENVIRONMENT_LAYER_MAX];
 
@@ -119,6 +122,7 @@ extern struct wormhole_socket *	wormhole_environment_async_setup(wormhole_enviro
 extern wormhole_environment_t *	wormhole_environment_async_complete(pid_t pid, int status);
 extern wormhole_environment_t *	wormhole_environment_new(const char *name, const wormhole_environment_t *base_env);
 extern void			wormhole_environment_set_root_directory(wormhole_environment_t *env, const char *);
+extern void			wormhole_environment_set_working_directory(wormhole_environment_t *env, const char *);
 
 extern void			wormhole_environment_set_fd(wormhole_environment_t *env, int fd);
 
