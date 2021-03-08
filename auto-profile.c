@@ -46,6 +46,7 @@ enum {
 };
 
 struct option wormhole_options[] = {
+	{ "help",		no_argument,		NULL,	'h' },
 	{ "debug",		no_argument,		NULL,	'd' },
 	{ "quiet",		no_argument,		NULL,	'q' },
 	{ "base-environment",	required_argument,	NULL,	OPT_BASE_ENVIRONMENT },
@@ -68,14 +69,18 @@ const char *		opt_exclude_file = NULL;
 bool			opt_quiet = false;
 
 static int		wormhole_auto_profile(const char *);
+static void		usage(int exval);
 
 int
 main(int argc, char **argv)
 {
 	int c;
 
-	while ((c = getopt_long(argc, argv, "dq", wormhole_options, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "dhq", wormhole_options, NULL)) != EOF) {
 		switch (c) {
+		case 'h':
+			usage(0);
+
 		case 'd':
 			tracing_increment_level();
 			break;
@@ -109,13 +114,38 @@ main(int argc, char **argv)
 			break;
 
 		default:
-			log_error("Usage message goes here.");
-			return 2;
+			log_error("Error parsing command line");
+			usage(2);
 		}
 	}
 
 	return wormhole_auto_profile(opt_overlay_root);
 }
+
+void
+usage(int exval)
+{
+	FILE *f = exval? stderr : stdout;
+
+	fprintf(f,
+		"Usage:\n"
+		"wormhole-autoprofile [options]\n"
+		"  --help, -h\n"
+		"     Display this help message\n"
+		"  --debug, -d\n"
+		"     Increase debugging verbosity\n"
+		"  --quiet, -q\n"
+		"     Suppress progress messages\n"
+		"  --overlay-directory <dirname>\n"
+		"     Specify directory containing the overlay tree.\n"
+		"  --output-file <path>\n"
+		"     Location to write the configuration file to (or \"auto\")\n"
+		"  --base-environment <name>\n"
+		"     FFU.\n"
+	);
+	exit(exval);
+}
+
 
 struct __make_path_state {
 	struct __make_path_state *parent;
