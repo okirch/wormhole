@@ -164,7 +164,7 @@ wormhole_daemon(const char *socket_path)
 		set_syslog("wormholed", LOG_DAEMON);
 	}
 
-	wormhole_install_sigchild_handler();
+	procutil_install_sigchild_handler();
 
 	while (wormhole_sockets) {
 		struct pollfd poll_array[WORMHOLE_SOCKET_MAX];
@@ -215,7 +215,7 @@ wormhole_reap_children(void)
 	pid_t pid;
 	int st;
 
-	while ((pid = wormhole_get_exited_child(&st)) > 0) {
+	while ((pid = procutil_get_exited_child(&st)) > 0) {
 		wormhole_environment_t *env;
 
 		env = wormhole_environment_async_complete(pid, st);

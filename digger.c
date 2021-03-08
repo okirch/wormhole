@@ -139,11 +139,11 @@ wormhole_digger_build(char **argv, const char *root_dir)
 	 * the slave tty.
 	 */
 
-	if (!wormhole_run_command_argv(argv, root_dir, &status))
+	if (!procutil_run_command_argv(argv, root_dir, &status))
 		return false;
 
-	if (!wormhole_child_status_okay(status)) {
-		log_error("Command \"%s\" failed: %s", argv[0], wormhole_child_status_describe(status));
+	if (!procutil_child_status_okay(status)) {
+		log_error("Command \"%s\" failed: %s", argv[0], procutil_child_status_describe(status));
 		return false;
 	}
 

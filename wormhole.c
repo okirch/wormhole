@@ -59,7 +59,7 @@ find_profile(const char *argv0)
 	char *command_name;
 	wormhole_profile_t *profile;
 
-	command_name = wormhole_command_path(argv0);
+	command_name = procutil_command_path(argv0);
 	if (command_name == NULL)
 		log_fatal("Cannot determine command name from argv[0] (%s)", argv0);
 
@@ -83,5 +83,5 @@ run_command(wormhole_profile_t *profile, int argc, char **argv)
 
 	trace("Looking good so far\n");
 
-	wormhole_exec_command_argv(profile->config->command, argv, env->root_directory);
+	procutil_exec_command_argv(profile->config->command, argv, env->root_directory);
 }

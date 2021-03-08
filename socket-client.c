@@ -142,7 +142,7 @@ wormhole_client(int argc, char **argv)
 	struct wormhole_namespace_closure closure = { argc, argv };
 
 	if (opt_environment == NULL)
-		opt_environment = wormhole_command_path(argv[0]);
+		opt_environment = procutil_command_path(argv[0]);
 
 	if (!wormhole_client_namespace_request(opt_environment, wormhole_namespace_response_callback, &closure))
 		return 1;

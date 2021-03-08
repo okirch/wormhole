@@ -38,7 +38,7 @@
 
 
 const char *
-wormhole_concat_argv(int argc, char **argv)
+procutil_concat_argv(int argc, char **argv)
 {
 	static char buffer[8192];
 	unsigned int pos, n;
@@ -155,7 +155,7 @@ wormhole_find_command(const char *argv0)
 }
 
 char *
-wormhole_command_path(const char *argv0)
+procutil_command_path(const char *argv0)
 {
 	if (strchr(argv0, '/') == NULL)
 		argv0 = wormhole_find_command(argv0);
@@ -164,7 +164,7 @@ wormhole_command_path(const char *argv0)
 }
 
 pid_t
-wormhole_fork_with_socket(int *fdp)
+procutil_fork_with_socket(int *fdp)
 {
 	int fdpair[2];
 	pid_t pid;
@@ -193,7 +193,7 @@ wormhole_fork_with_socket(int *fdp)
 }
 
 bool
-wormhole_exec_command_argv(const char *command, char **argv, const char *root_dir)
+procutil_exec_command_argv(const char *command, char **argv, const char *root_dir)
 {
 	if (root_dir) {
 		if (chroot(root_dir) < 0) {
@@ -210,7 +210,7 @@ wormhole_exec_command_argv(const char *command, char **argv, const char *root_di
 }
 
 bool
-wormhole_run_command_argv(char **argv, const char *root_dir, int *status_ret)
+procutil_run_command_argv(char **argv, const char *root_dir, int *status_ret)
 {
 	int status;
 	pid_t pid;
@@ -221,7 +221,7 @@ wormhole_run_command_argv(char **argv, const char *root_dir, int *status_ret)
 	}
 
 	if (pid == 0) {
-		(void) wormhole_exec_command_argv(argv[0], argv, root_dir);
+		(void) procutil_exec_command_argv(argv[0], argv, root_dir);
 	}
 
 	while (waitpid(pid, &status, 0) < 0) {
@@ -350,7 +350,7 @@ reaper(int sig)
 }
 
 void
-wormhole_install_sigchild_handler(void)
+procutil_install_sigchild_handler(void)
 {
 	struct sigaction act;
 
@@ -360,7 +360,7 @@ wormhole_install_sigchild_handler(void)
 }
 
 pid_t
-wormhole_get_exited_child(int *status)
+procutil_get_exited_child(int *status)
 {
 	pid_t pid;
 
@@ -378,7 +378,7 @@ wormhole_get_exited_child(int *status)
 }
 
 bool
-wormhole_child_status_okay(int status)
+procutil_child_status_okay(int status)
 {
 	if (WIFSIGNALED(status))
 		return false;
@@ -390,7 +390,7 @@ wormhole_child_status_okay(int status)
 }
 
 const char *
-wormhole_child_status_describe(int status)
+procutil_child_status_describe(int status)
 {
 	static char msgbuf[128];
 

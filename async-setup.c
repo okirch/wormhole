@@ -230,7 +230,7 @@ wormhole_environment_async_setup(wormhole_environment_t *env, wormhole_profile_t
 		return NULL;
 	}
 
-	pid = wormhole_fork_with_socket(&sock_fd);
+	pid = procutil_fork_with_socket(&sock_fd);
 	if (pid < 0)
 		return NULL;
 
@@ -274,9 +274,9 @@ wormhole_environment_async_complete(pid_t pid, int status)
 	ctx->child_pid = 0;
 	env = ctx->env;
 
-	if (!wormhole_child_status_okay(status)) {
+	if (!procutil_child_status_okay(status)) {
 		log_error("Environment \"%s\": setup process failed (%s)", env->name,
-				wormhole_child_status_describe(status));
+				procutil_child_status_describe(status));
 		env->failed = true;
 
 		/* Setup failed, don't bother waiting for anything on this socket */
