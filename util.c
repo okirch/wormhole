@@ -961,3 +961,42 @@ strutil_equal(const char *s1, const char *s2)
 
 	return !strcmp(s1, s2);
 }
+
+void
+strutil_array_init(struct strutil_array *array)
+{
+	memset(array, 0, sizeof(*array));
+}
+
+void
+strutil_array_append(struct strutil_array *array, const char *value)
+{
+	static const unsigned int chunk_size = 8;
+
+	if (array->count == 0) {
+		array->data = calloc(chunk_size, sizeof(array->data[0]));
+	} else
+	if ((array->count % chunk_size) == 0) {
+		char **new_data;
+
+		new_data = realloc(array->data, (array->count + chunk_size) * sizeof(array->data[0]));
+		if (new_data == NULL)
+			log_fatal("%s: memory allocation failed", __func__);
+		array->data = new_data;
+	}
+
+	array->data[array->count++] = strdup(value);
+}
+
+void
+strutil_array_destroy(struct strutil_array *array)
+{
+	unsigned int i;
+
+	for (i = 0; i < array->count; ++i)
+		free(array->data[i]);
+	if (array->data == NULL)
+		free(array->data);
+
+	memset(array, 0, sizeof(*array));
+}

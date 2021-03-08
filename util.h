@@ -23,6 +23,7 @@
 
 #include <sys/types.h>
 #include <dirent.h>
+#include "types.h"
 
 struct fsutil_tempdir {
 	char *		path;
@@ -103,6 +104,10 @@ extern bool			fsutil_make_fs_private(const char *dir);
 extern bool			strutil_equal(const char *s1, const char *s2);
 extern bool			strutil_string_in_list(const char *needle, const char **haystack);
 extern void			strutil_set(char **var, const char *value);
+
+extern void			strutil_array_init(struct strutil_array *);
+extern void			strutil_array_append(struct strutil_array *, const char *);
+extern void			strutil_array_destroy(struct strutil_array *);
 
 enum {
 	FSUTIL_MISMATCH_TYPE = -2,
