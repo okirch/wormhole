@@ -12,6 +12,7 @@ WORMHOLE	= wormhole
 WORMHOLE_SRCS	= wormhole.c \
 		  common.c \
 		  profiles.c \
+		  imgcapability.c \
 		  pathstate.c \
 		  runtime.c \
 		  rt-podman.c \
@@ -22,6 +23,7 @@ WORMHOLE_OBJS	= $(WORMHOLE_SRCS:.c=.o)
 WORMHOLED	= wormholed
 WORMHOLED_SRCS	= wormholed.c \
 		  profiles.c \
+		  imgcapability.c \
 		  pathstate.c \
 		  runtime.c \
 		  rt-podman.c \
@@ -37,6 +39,7 @@ DIGGER		= wormhole-digger
 DIGGER_SRCS	= digger.c \
 		  common.c \
 		  profiles.c \
+		  imgcapability.c \
 		  pathstate.c \
 		  mntent.c \
 		  runtime.c \

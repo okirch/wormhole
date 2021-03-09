@@ -21,6 +21,8 @@
 #ifndef _WORMHOLE_ENVIRONMENT_H
 #define _WORMHOLE_ENVIRONMENT_H
 
+#include "types.h"
+
 /* fwd decl */
 struct wormhole_profile;
 
@@ -119,6 +121,7 @@ struct wormhole_environment {
 struct procutil_command;
 
 extern wormhole_environment_t *	wormhole_environment_find(const char *name);
+extern wormhole_environment_t *	wormhole_environment_by_capability(const char *name);
 extern bool			wormhole_environment_setup(wormhole_environment_t *env);
 extern bool			wormhole_environment_async_check(wormhole_environment_t *);
 extern struct wormhole_socket *	wormhole_environment_async_setup(wormhole_environment_t *, struct wormhole_profile *);
@@ -149,6 +152,10 @@ extern wormhole_tree_walker_t *wormhole_tree_walk(wormhole_tree_state_t *tree);
 extern wormhole_path_state_t *	wormhole_tree_walk_next(wormhole_tree_walker_t *t, const char **path_p);
 extern void			wormhole_tree_walk_skip_children(wormhole_tree_walker_t *t);
 extern void			wormhole_tree_walk_end(wormhole_tree_walker_t *t);
+
+extern bool			wormhole_capability_install(const char *id, const char *path);
+extern char *			wormhole_capability_get_best_match(const char *id);
+extern bool			wormhole_capabilities_gc(void);
 
 extern wormhole_tree_state_t *	wormhole_get_mount_state(const char *mtab);
 

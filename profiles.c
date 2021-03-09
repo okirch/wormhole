@@ -361,6 +361,50 @@ wormhole_environment_find(const char *name)
 	return NULL;
 }
 
+/*
+ * Find an environment by capability.
+ * The way this works is we have a farm of symlinks in eg
+ * /var/lib/wormhole/capability.
+ * When activating an environment like opensuse-leap-15.2.8.118, we create
+ * symlinks for opensuse-leap-15.2.8.118, opensuse-leap-15.2.8, opensuse-leap-15.2 etc
+ * in this directory, all pointing to the actual environment config.
+ */
+wormhole_environment_t *
+wormhole_environment_by_capability(const char *name)
+{
+	wormhole_environment_t *env = NULL;
+	struct wormhole_environment_config *env_cfg;
+	struct wormhole_config *cfg;
+	char *path;
+
+	if (!(path = wormhole_capability_get_best_match(name)))
+		return NULL;
+
+	cfg = wormhole_config_load(path);
+	if (cfg == NULL)
+		log_fatal("Unable to parse config file %s", path);
+	free(path);
+
+	for (env_cfg = cfg->environments; env_cfg; env_cfg = env_cfg->next) {
+		/* Just grab the first env provided by this file.
+		 * Later, we may want to consult additional qualifiers such
+		 * as image vs layer.
+		 */
+		break;
+	}
+
+	if (env_cfg) {
+		env = __wormhole_environment_from_config(env_cfg);
+		if (!__wormhole_environment_chase_layers(env, env_cfg)) {
+			/* wormhole_environment_free(env); */
+			env = NULL;
+		}
+	}
+	/* wormhole_config_free(cfg); */
+
+	return env;
+}
+
 const char *
 wormhole_environment_path(wormhole_environment_t *env, const char *abs_path)
 {

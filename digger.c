@@ -589,10 +589,12 @@ wormhole_digger(int argc, char **argv)
 
 	if (opt_base_environment != 0) {
 		/* Set up base environment */
-                if ((env = wormhole_environment_find(opt_base_environment)) == NULL) {
+                if ((env = wormhole_environment_by_capability(opt_base_environment)) == NULL) {
 			log_error("Unknown environment %s", opt_base_environment);
 			return false;
 		}
+
+		trace("Using environment %s (type %d)", env->name, env->layer[0]->type);
 
 		env = wormhole_environment_new("digger", env);
 	} else {
