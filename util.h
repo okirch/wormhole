@@ -107,6 +107,7 @@ extern void			strutil_set(char **var, const char *value);
 
 extern void			strutil_array_init(struct strutil_array *);
 extern void			strutil_array_append(struct strutil_array *, const char *);
+extern void			strutil_array_append_array(struct strutil_array *, const struct strutil_array *);
 extern void			strutil_array_destroy(struct strutil_array *);
 
 enum {

@@ -989,6 +989,15 @@ strutil_array_append(struct strutil_array *array, const char *value)
 }
 
 void
+strutil_array_append_array(struct strutil_array *dst, const struct strutil_array *src)
+{
+	unsigned int i;
+
+	for (i = 0; i < src->count; ++i)
+		strutil_array_append(dst, src->data[i]);
+}
+
+void
 strutil_array_destroy(struct strutil_array *array)
 {
 	unsigned int i;
