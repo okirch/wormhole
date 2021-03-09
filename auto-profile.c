@@ -88,8 +88,9 @@ struct autoprofile_state {
 	wormhole_tree_state_t *		tree;
 
 	char *				environment_name;
-	struct wormhole_layer_config *	layer;
-	struct wormhole_profile_config *profiles;
+
+	struct wormhole_config *	config;
+	struct wormhole_layer_config *	_layer;
 };
 
 int
@@ -274,10 +275,32 @@ pathinfo_action_to_directive(int action)
 void
 autoprofile_state_init(struct autoprofile_state *state, const char *tree_root)
 {
+	struct wormhole_config *config;
+
 	memset(state, 0, sizeof(*state));
 
 	state->tree = wormhole_tree_state_new();
 	wormhole_tree_state_set_root(state->tree, tree_root);
+
+	config = calloc(1, sizeof(*config));
+	state->config = config;
+}
+
+void
+autoprofile_state_create_layer(struct autoprofile_state *state, const char *root_directory)
+{
+	struct wormhole_layer_config *layer;
+
+	layer = calloc(1, sizeof(*layer));
+	strutil_set(&layer->directory, root_directory);
+
+	state->_layer = layer;
+}
+
+static inline struct wormhole_layer_config *
+autoprofile_state_get_layer(const struct autoprofile_state *state)
+{
+	return state->_layer;
 }
 
 void
@@ -289,7 +312,7 @@ autoprofile_state_set_environment(struct autoprofile_state *state, const char *n
 static bool
 autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
 {
-	struct wormhole_layer_config *output = state->layer;
+	struct wormhole_layer_config *output = autoprofile_state_get_layer(state);
 	struct wormhole_profile_config *profile;
 	unsigned int i;
 	bool ok = true;
@@ -350,7 +373,7 @@ autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
 	fprintf(fp, "\t}\n");
 	fprintf(fp, "}\n");
 
-	for (profile = state->profiles; profile; profile = profile->next) {
+	for (profile = state->config->profiles; profile; profile = profile->next) {
 		fprintf(fp, "\n");
 		fprintf(fp, "profile %s {\n", profile->name);
 		if (profile->wrapper)
@@ -391,16 +414,6 @@ static const char *
 __build_path(wormhole_tree_state_t *tree, const char *path)
 {
 	return __make_path(wormhole_tree_state_get_root(tree), path);
-}
-
-struct wormhole_layer_config *
-alloc_layer_config(const char *tree_root)
-{
-	struct wormhole_layer_config *layer;
-
-	layer = calloc(1, sizeof(*layer));
-	layer->directory = strdup(tree_root);
-	return layer;
 }
 
 struct dir_disposition {
@@ -494,6 +507,7 @@ __perform_overlay(wormhole_tree_state_t *tree, const char *arg, struct wormhole_
 static bool
 perform_overlay(struct autoprofile_state *state, const char *arg)
 {
+	struct wormhole_layer_config *layer = autoprofile_state_get_layer(state);
 	wormhole_tree_state_t *tree = state->tree;
 	const char *path = __build_path(tree, arg);
 
@@ -502,13 +516,14 @@ perform_overlay(struct autoprofile_state *state, const char *arg)
 		return false;
 	}
 
-	__perform_overlay(tree, arg, state->layer, path);
+	__perform_overlay(tree, arg, layer, path);
 	return true;
 }
 
 static bool
 perform_bind(struct autoprofile_state *state, const char *arg)
 {
+	struct wormhole_layer_config *layer = autoprofile_state_get_layer(state);
 	wormhole_tree_state_t *tree = state->tree;
 	const char *path = __build_path(tree, arg);
 
@@ -517,7 +532,7 @@ perform_bind(struct autoprofile_state *state, const char *arg)
 		return false;
 	}
 
-	__perform_bind(tree, arg, state->layer, path);
+	__perform_bind(tree, arg, layer, path);
 	return true;
 }
 
@@ -540,11 +555,12 @@ __is_empty(wormhole_tree_state_t *tree, const char *arg, const char *path)
 static bool
 perform_overlay_unless_empty(struct autoprofile_state *state, const char *arg)
 {
+	struct wormhole_layer_config *layer = autoprofile_state_get_layer(state);
 	wormhole_tree_state_t *tree = state->tree;
 	const char *path = __build_path(tree, arg);
 
 	if (!__is_empty(tree, arg, path))
-		__perform_overlay(tree, arg, state->layer, path);
+		__perform_overlay(tree, arg, layer, path);
 
 	return true;
 }
@@ -552,11 +568,12 @@ perform_overlay_unless_empty(struct autoprofile_state *state, const char *arg)
 static bool
 perform_bind_unless_empty(struct autoprofile_state *state, const char *arg)
 {
+	struct wormhole_layer_config *layer = autoprofile_state_get_layer(state);
 	wormhole_tree_state_t *tree = state->tree;
 	const char *path = __build_path(tree, arg);
 
 	if (!__is_empty(tree, arg, path))
-		__perform_bind(tree, arg, state->layer, path);
+		__perform_bind(tree, arg, layer, path);
 
 	return true;
 }
@@ -585,6 +602,7 @@ perform_must_be_empty(struct autoprofile_state *state, const char *arg)
 static bool
 perform_check_ldconfig(struct autoprofile_state *state, const char *arg)
 {
+	struct wormhole_layer_config *layer = autoprofile_state_get_layer(state);
 	wormhole_tree_state_t *tree = state->tree;
 	const char *path;
 
@@ -596,7 +614,7 @@ perform_check_ldconfig(struct autoprofile_state *state, const char *arg)
 		if (!opt_quiet)
 			log_info("Found %s, configuring layer to use ldconfig", arg);
 		wormhole_tree_state_set_ignore(tree, arg);
-		state->layer->use_ldconfig = true;
+		layer->use_ldconfig = true;
 	}
 	return true;
 }
@@ -604,6 +622,7 @@ perform_check_ldconfig(struct autoprofile_state *state, const char *arg)
 static bool
 perform_mount_tmpfs(struct autoprofile_state *state, const char *arg)
 {
+	struct wormhole_layer_config *layer = autoprofile_state_get_layer(state);
 	wormhole_tree_state_t *tree = state->tree;
 	const char *path = __build_path(tree, arg);
 	wormhole_path_info_t *pi;
@@ -614,7 +633,7 @@ perform_mount_tmpfs(struct autoprofile_state *state, const char *arg)
 	if (!opt_quiet)
 		log_info("Mounting tmpfs on %s", arg);
 
-	pi = wormhole_layer_config_add_path(state->layer, WORMHOLE_PATH_TYPE_MOUNT, arg);
+	pi = wormhole_layer_config_add_path(layer, WORMHOLE_PATH_TYPE_MOUNT, arg);
 	wormhole_path_info_set_mount_fstype(pi, "tmpfs");
 	wormhole_tree_state_set_system_mount(tree, arg, "tmpfs", NULL);
 
@@ -655,8 +674,8 @@ perform_check_binaries(struct autoprofile_state *state, const char *arg)
 		strutil_set(&profile->environment, state->environment_name);
 		strutil_set(&profile->wrapper, __make_path(opt_wrapper_directory, d->d_name));
 
-		profile->next = state->profiles;
-		state->profiles = profile;
+		profile->next = state->config->profiles;
+		state->config->profiles = profile;
 	}
 	__make_path_pop();
 
@@ -862,6 +881,7 @@ failed:
 static bool
 autoprofile_process(struct autoprofile_config *config, struct autoprofile_state *state)
 {
+	struct wormhole_layer_config *layer = autoprofile_state_get_layer(state);
 	struct action *a;
 
 	for (a = config->actions; a; a = a->next) {
@@ -871,7 +891,7 @@ autoprofile_process(struct autoprofile_config *config, struct autoprofile_state 
 		}
 	}
 
-	state->layer->type = config->env_type;
+	layer->type = config->env_type;
 	return true;
 }
 
@@ -1104,7 +1124,7 @@ wormhole_auto_profile(const char *root_path)
 		return 1;
 
 	autoprofile_state_init(&state, tree_root);
-	state.layer = alloc_layer_config(output_tree_root);
+	autoprofile_state_create_layer(&state, output_tree_root);
 
 	if (opt_environment_name)
 		autoprofile_state_set_environment(&state, opt_environment_name);
