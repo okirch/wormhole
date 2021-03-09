@@ -583,7 +583,9 @@ struct autoprofile_config {
 	char *		filename;
 	int		env_type;
 	bool		ignore_stray_files;
+
 	struct action *	actions;
+	struct action **action_tail;
 };
 
 struct autoprofile_config *
@@ -594,6 +596,8 @@ autoprofile_config_new(const char *filename)
 	config = calloc(1, sizeof(*config));
 	config->filename = strdup(filename);
 	config->env_type = WORMHOLE_LAYER_TYPE_LAYER;
+
+	config->action_tail = &config->actions;
 	return config;
 }
 
@@ -613,16 +617,49 @@ autoprofile_config_free(struct autoprofile_config *config)
 	free(config);
 }
 
+static struct action *
+__autoprofile_add_action(struct autoprofile_config *config, unsigned int lineno,
+		const char *arg, bool (*perform)(struct autoprofile_state *state, const char *arg))
+{
+	struct action *a;
+
+	a = action_new(arg);
+	a->line = lineno;
+	a->perform = perform;
+
+	*(config->action_tail) = a;
+	config->action_tail = &a->next;
+
+	return a;
+}
+
 struct autoprofile_config *
 load_autoprofile_config(const char *profile)
 {
+	static struct action_keyword {
+		const char *		name;
+		bool			(*perform)(struct autoprofile_state *state, const char *arg);
+	} action_keywords[] = {
+		{ "optional-directory",		perform_optional_directory },
+		{ "overlay",			perform_overlay },
+		{ "overlay-unless-empty",	perform_overlay_unless_empty },
+		{ "bind",			perform_bind },
+		{ "bind-unless-empty",		perform_bind_unless_empty },
+		{ "must-be-empty",		perform_must_be_empty },
+		{ "check-ldconfig",		perform_check_ldconfig },
+		{ "ignore-if-empty",		perform_ignore_if_empty },
+		{ "ignore-empty-subdirs",	perform_ignore_empty_subdirs },
+		{ "ignore",			perform_ignore },
+		{ "mount-tmpfs",		perform_mount_tmpfs },
+		{ NULL }
+	};
 	const char *filename;
 	struct autoprofile_config *config;
-	struct action **pos;
 	FILE *fp;
 	char pathbuf[PATH_MAX];
 	char linebuf[1024];
 	unsigned int lineno = 0;
+
 
 	if (strchr(profile, '/') != NULL) {
 		filename = profile;
@@ -637,11 +674,9 @@ load_autoprofile_config(const char *profile)
 	}
 
 	config = autoprofile_config_new(filename);
-	pos = &config->actions;
 
 	while ((fgets(linebuf, sizeof(linebuf), fp)) != NULL) {
 		char *s, *kwd, *arg;
-		struct action *a;
 
 		linebuf[strcspn(linebuf, "\r\n")] = '\0';
 		lineno++;
@@ -673,49 +708,21 @@ load_autoprofile_config(const char *profile)
 				goto failed;
 			}
 			continue;
-		}
-
-		a = *pos = action_new(arg);
-		pos = &a->next;
-
-		if (!strcmp(kwd, "optional-directory")) {
-			a->perform = perform_optional_directory;
-		} else
-		if (!strcmp(kwd, "overlay")) {
-			a->perform = perform_overlay;
-		} else
-		if (!strcmp(kwd, "overlay-unless-empty")) {
-			a->perform = perform_overlay_unless_empty;
-		} else
-		if (!strcmp(kwd, "bind")) {
-			a->perform = perform_bind;
-		} else
-		if (!strcmp(kwd, "bind-unless-empty")) {
-			a->perform = perform_bind_unless_empty;
-		} else
-		if (!strcmp(kwd, "must-be-empty")) {
-			a->perform = perform_must_be_empty;
-		} else
-		if (!strcmp(kwd, "check-ldconfig")) {
-			a->perform = perform_check_ldconfig;
-		} else
-		if (!strcmp(kwd, "ignore-if-empty")) {
-			a->perform = perform_ignore_if_empty;
-		} else
-		if (!strcmp(kwd, "ignore-empty-subdirs")) {
-			a->perform = perform_ignore_empty_subdirs;
-		} else
-		if (!strcmp(kwd, "ignore")) {
-			a->perform = perform_ignore;
-		} else
-		if (!strcmp(kwd, "mount-tmpfs")) {
-			a->perform = perform_mount_tmpfs;
 		} else {
-			log_error("%s line %u: unknown keyword \"%s\"", filename, lineno, kwd);
-			goto failed;
-		}
+			struct action_keyword *akw;
 
-		a->line = lineno;
+			for (akw = action_keywords; akw->name; ++akw) {
+				if (!strcmp(akw->name, kwd))
+					break;
+			}
+
+			if (akw->perform == NULL) {
+				log_error("%s line %u: unknown keyword \"%s\"", filename, lineno, kwd);
+				goto failed;
+			}
+
+			__autoprofile_add_action(config, lineno, arg, akw->perform);
+		}
 	}
 
 	fclose(fp);
