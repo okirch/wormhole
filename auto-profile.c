@@ -934,6 +934,8 @@ wormhole_auto_profile(const char *root_path)
 		if (opt_output && !strcmp(opt_output, "auto")) {
 			opt_output = strdup(__make_path(root_path, "environ.conf"));
 			output_tree_root = "tree";
+		} else {
+			output_tree_root = strdup(subdir);
 		}
 	}
 
