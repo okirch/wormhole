@@ -240,36 +240,6 @@ __make_path(const char *root_path, const char *relative_path)
 	return buf;
 }
 
-static const char *
-pathinfo_action_to_directive(int action)
-{
-	switch (action) {
-	case WORMHOLE_PATH_TYPE_HIDE:
-		return "hide";
-
-	case WORMHOLE_PATH_TYPE_BIND:
-		return "bind";
-
-	case WORMHOLE_PATH_TYPE_BIND_CHILDREN:
-		return "bind-children";
-
-	case WORMHOLE_PATH_TYPE_OVERLAY:
-		return "overlay";
-
-	case WORMHOLE_PATH_TYPE_OVERLAY_CHILDREN:
-		return "overlay-children";
-
-	case WORMHOLE_PATH_TYPE_MOUNT:
-		return "mount";
-
-	case WORMHOLE_PATH_TYPE_WORMHOLE:
-		return "wormhole";
-
-	default:
-		return NULL;
-	}
-}
-
 void
 autoprofile_state_init(struct autoprofile_state *state, const char *tree_root)
 {
@@ -342,145 +312,6 @@ static inline struct wormhole_layer_config *
 autoprofile_state_get_layer(const struct autoprofile_state *state)
 {
 	return state->_layer;
-}
-
-static bool
-__wormhole_layer_config_write(const struct wormhole_layer_config *output, FILE *fp)
-{
-	bool ok = true;
-	unsigned int i;
-
-	if (output->type == WORMHOLE_LAYER_TYPE_LAYER) {
-		fprintf(fp, "\tdefine-layer {\n");
-	} else if (output->type == WORMHOLE_LAYER_TYPE_IMAGE) {
-		fprintf(fp, "\tdefine-image {\n");
-	} else {
-		log_error("Don't know how to handle layer type %u", output->type);
-		return false;
-	}
-
-	fprintf(fp, "\t\tdirectory %s\n", output->directory);
-	fprintf(fp, "\n");
-
-	if (output->use_ldconfig) {
-		fprintf(fp, "\t\tuse ldconfig\n");
-		fprintf(fp, "\n");
-	}
-
-	for (i = 0; i < output->npaths; ++i) {
-		struct wormhole_path_info *pi = &output->path[i];
-
-		const char *action = pathinfo_action_to_directive(pi->type);
-
-		if (action == NULL) {
-			log_error("%s: unsupported action %d", pi->path, pi->type);
-			ok = false;
-			continue;
-		}
-
-		switch (pi->type) {
-		case WORMHOLE_PATH_TYPE_MOUNT:
-			fprintf(fp, "\t\t%s %s", action, pi->path);
-			if (pi->mount.fstype)
-				fprintf(fp, " %s", pi->mount.fstype);
-			if (pi->mount.device)
-				fprintf(fp, " %s", pi->mount.device);
-			if (pi->mount.options)
-				fprintf(fp, " %s", pi->mount.options);
-			fputs("\n", fp);
-			break;
-		default:
-			fprintf(fp, "\t\t%s %s\n", action, pi->path);
-			break;
-		}
-	}
-	fprintf(fp, "\t}\n");
-	fprintf(fp, "}\n");
-
-	return ok;
-}
-
-static bool
-__wormhole_environment_config_write(const struct wormhole_environment_config *env, FILE *fp)
-{
-	struct wormhole_layer_config *layer;
-	bool ok = true;
-	unsigned int i;
-
-	fprintf(fp, "environment %s {\n", env->name);
-
-	for (i = 0; i < env->provides.count; ++i)
-		fprintf(fp, "\tprovides %s\n", env->provides.data[i]);
-	for (i = 0; i < env->requires.count; ++i)
-		fprintf(fp, "\trequires %s\n", env->requires.data[i]);
-	if (env->provides.count || env->requires.count)
-		fprintf(fp, "\n");
-
-	for (layer = env->layers; layer; layer = layer->next) {
-		if (!__wormhole_layer_config_write(layer, fp))
-			ok = false;
-	}
-
-	return ok;
-}
-
-static bool
-__wormhole_config_write(const struct wormhole_config *cfg, FILE *fp)
-{
-	struct wormhole_environment_config *env;
-	struct wormhole_profile_config *profile;
-	bool ok = true;
-
-	for (env = cfg->environments; env; env = env->next) {
-		if (!__wormhole_environment_config_write(env, fp))
-			ok = false;
-	}
-
-	for (profile = cfg->profiles; profile; profile = profile->next) {
-		fprintf(fp, "\n");
-		fprintf(fp, "profile %s {\n", profile->name);
-		if (profile->wrapper)
-			fprintf(fp, "\twrapper %s\n", profile->wrapper);
-		if (profile->environment)
-			fprintf(fp, "\tenvironment %s\n", profile->environment);
-		if (profile->command)
-			fprintf(fp, "\tcommand %s\n", profile->command);
-		fprintf(fp, "}\n");
-	}
-
-	return ok;
-}
-
-static bool
-autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
-{
-	bool ok = true;
-
-	ok = __wormhole_config_write(state->config, fp);
-
-	fflush(fp);
-	return ok;
-}
-
-static bool
-autoprofile_write_file(struct autoprofile_state *state, const char *filename)
-{
-	bool result;
-	FILE *fp;
-
-	if (opt_output == NULL || !strcmp(opt_output, "-"))
-		return autoprofile_state_output(state, stdout);
-
-	fp = fopen(opt_output, "w");
-	if (fp == NULL) {
-		log_error("Unable to open %s for writing: %m", opt_output);
-		return false;
-	}
-
-	result = autoprofile_state_output(state, fp);
-	fclose(fp);
-
-	return result;
 }
 
 static const char *
@@ -1216,7 +1047,7 @@ wormhole_auto_profile(const char *root_path)
 			return 1;
 	}
 
-	if (!autoprofile_write_file(&state, opt_output))
+	if (!wormhole_config_write(state.config, opt_output))
 		return 1;
 
 	if (opt_exclude_file)
