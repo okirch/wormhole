@@ -9,35 +9,27 @@ MAN8DIR		= /usr/share/man/man8
 COPT		= -g
 CFLAGS		= -Wall -D_GNU_SOURCE -I../console $(COPT)
 WORMHOLE	= wormhole
-WORMHOLE_SRCS	= wormhole.c \
-		  common.c \
-		  profiles.c \
-		  imgcapability.c \
-		  pathstate.c \
-		  runtime.c \
-		  rt-podman.c \
-		  config.c \
-		  tracing.c \
-		  util.c
+WORMHOLE_SRCS	= wormhole.c
 WORMHOLE_OBJS	= $(WORMHOLE_SRCS:.c=.o)
 WORMHOLED	= wormholed
 WORMHOLED_SRCS	= wormholed.c \
-		  profiles.c \
-		  imgcapability.c \
-		  pathstate.c \
-		  runtime.c \
-		  rt-podman.c \
 		  async-setup.c \
 		  socket.c \
 		  protocol.c \
-		  config.c \
-		  buffer.c \
-		  tracing.c \
-		  util.c
+		  buffer.c
 WORMHOLED_OBJS	= $(WORMHOLED_SRCS:.c=.o)
 DIGGER		= wormhole-digger
-DIGGER_SRCS	= digger.c \
-		  common.c \
+DIGGER_SRCS	= digger.c
+DIGGER_OBJS	= $(DIGGER_SRCS:.c=.o)
+AUTOPROF	= wormhole-autoprofile
+AUTOPROF_CONF	= autoprofile-default.conf \
+		  autoprofile-image.conf
+AUTOPROF_SRCS	= auto-profile.c
+AUTOPROF_OBJS	= $(AUTOPROF_SRCS:.c=.o)
+LINK		= -L. -lwormhole -lutil
+
+LIB		= libwormhole.a
+LIB_SRCS	= common.c \
 		  profiles.c \
 		  imgcapability.c \
 		  pathstate.c \
@@ -47,18 +39,7 @@ DIGGER_SRCS	= digger.c \
 		  config.c \
 		  tracing.c \
 		  util.c
-DIGGER_OBJS	= $(DIGGER_SRCS:.c=.o)
-AUTOPROF	= wormhole-autoprofile
-AUTOPROF_CONF	= autoprofile-default.conf \
-		  autoprofile-image.conf
-AUTOPROF_SRCS	= auto-profile.c \
-		  config.c \
-		  pathstate.c \
-		  tracing.c \
-		  util.c
-AUTOPROF_OBJS	= $(AUTOPROF_SRCS:.c=.o)
-LINK		= -lutil
-LIB		= 
+LIB_OBJS	= $(LIB_SRCS:.c=.o)
 
 MAN1PAGES	= wormhole.1 \
 		  wormhole-digger.1 \
@@ -109,6 +90,9 @@ $(DIGGER): $(DIGGER_OBJS) $(LIB)
 
 $(AUTOPROF): $(AUTOPROF_OBJS) $(LIB)
 	$(CC) $(CFLAGS) -o $@ $(AUTOPROF_OBJS) $(LINK)
+
+$(LIB): $(LIB_OBJS)
+	$(AR) crv $@  $(LIB_OBJS)
 
 config-test: config.c tracing.o
 	$(CC) $(CFLAGS) -o $@ -DTEST config.c tracing.o $(LINK)
