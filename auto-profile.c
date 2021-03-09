@@ -78,6 +78,11 @@ struct strutil_array	opt_requires;
 static int		wormhole_auto_profile(const char *);
 static void		usage(int exval);
 
+struct autoprofile_state {
+	wormhole_tree_state_t *		tree;
+	struct wormhole_layer_config *	layer;
+};
+
 int
 main(int argc, char **argv)
 {
@@ -237,6 +242,15 @@ pathinfo_action_to_directive(int action)
 	default:
 		return NULL;
 	}
+}
+
+void
+autoprofile_state_init(struct autoprofile_state *state, const char *tree_root)
+{
+	memset(state, 0, sizeof(*state));
+
+	state->tree = wormhole_tree_state_new();
+        wormhole_tree_state_set_root(state->tree, tree_root);
 }
 
 static bool
@@ -918,8 +932,7 @@ wormhole_auto_profile(const char *root_path)
 	FILE *fp;
 	int retval = 0;
 	struct autoprofile_config *config;
-	wormhole_tree_state_t *real_tree;
-	struct wormhole_layer_config *output;
+	struct autoprofile_state state;
 
 	tree_root = root_path;
 	output_tree_root = root_path;
@@ -939,20 +952,18 @@ wormhole_auto_profile(const char *root_path)
 		}
 	}
 
-	real_tree = wormhole_tree_state_new();
-	wormhole_tree_state_set_root(real_tree, tree_root);
-
 	config = load_autoprofile_config(opt_profile);
 	if (config == NULL)
 		return 1;
 
-	output = alloc_layer_config(output_tree_root);
+	autoprofile_state_init(&state, tree_root);
+	state.layer = alloc_layer_config(output_tree_root);
 
-	if (!perform(config, real_tree, output))
+	if (!perform(config, state.tree, state.layer))
 		return 1;
 
 	if (!config->ignore_stray_files) {
-		if (!check_for_stray_files(real_tree))
+		if (!check_for_stray_files(state.tree))
 			return 1;
 	}
 
@@ -967,17 +978,17 @@ wormhole_auto_profile(const char *root_path)
 		if (fp == NULL)
 			log_fatal("Unable to open %s for writing: %m", opt_output);
 
-		dump_config(fp, env_name,  output);
+		dump_config(fp, env_name,  state.layer);
 		fclose(fp);
 
 		printf("Environment definition written to %s\n", opt_output);
 	} else {
-		dump_config(stdout, env_name,  output);
+		dump_config(stdout, env_name,  state.layer);
 		fflush(stdout);
 	}
 
 	if (opt_exclude_file)
-		write_exclude_file(opt_exclude_file, real_tree);
+		write_exclude_file(opt_exclude_file, state.tree);
 
 	return retval;
 }
