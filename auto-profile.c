@@ -306,14 +306,36 @@ autoprofile_state_environment_name(const struct autoprofile_state *state)
 }
 
 void
+autoprofile_state_set_requires(struct autoprofile_state *state, const struct strutil_array *names)
+{
+	struct wormhole_environment_config *env = state->config->environments;
+
+	assert(env);
+	strutil_array_append_array(&env->requires, names);
+}
+
+void
+autoprofile_state_set_provides(struct autoprofile_state *state, const struct strutil_array *names)
+{
+	struct wormhole_environment_config *env = state->config->environments;
+
+	assert(env);
+	strutil_array_append_array(&env->provides, names);
+}
+
+void
 autoprofile_state_create_layer(struct autoprofile_state *state, const char *root_directory)
 {
+	struct wormhole_environment_config *env = state->config->environments;
 	struct wormhole_layer_config *layer;
+
+	assert(env->layers == NULL);
 
 	layer = calloc(1, sizeof(*layer));
 	strutil_set(&layer->directory, root_directory);
 
 	state->_layer = layer;
+	env->layers = layer;
 }
 
 static inline struct wormhole_layer_config *
@@ -323,22 +345,10 @@ autoprofile_state_get_layer(const struct autoprofile_state *state)
 }
 
 static bool
-autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
+__wormhole_layer_config_write(const struct wormhole_layer_config *output, FILE *fp)
 {
-	struct wormhole_environment_config *env = state->config->environments;
-	struct wormhole_layer_config *output = autoprofile_state_get_layer(state);
-	struct wormhole_profile_config *profile;
-	unsigned int i;
 	bool ok = true;
-
-	fprintf(fp, "environment %s {\n", env->name);
-
-	for (i = 0; i < opt_provides.count; ++i)
-		fprintf(fp, "\tprovides %s\n", opt_provides.data[i]);
-	for (i = 0; i < opt_requires.count; ++i)
-		fprintf(fp, "\trequires %s\n", opt_requires.data[i]);
-	if (opt_provides.count || opt_requires.count)
-		fprintf(fp, "\n");
+	unsigned int i;
 
 	if (output->type == WORMHOLE_LAYER_TYPE_LAYER) {
 		fprintf(fp, "\tdefine-layer {\n");
@@ -387,7 +397,46 @@ autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
 	fprintf(fp, "\t}\n");
 	fprintf(fp, "}\n");
 
-	for (profile = state->config->profiles; profile; profile = profile->next) {
+	return ok;
+}
+
+static bool
+__wormhole_environment_config_write(const struct wormhole_environment_config *env, FILE *fp)
+{
+	struct wormhole_layer_config *layer;
+	bool ok = true;
+	unsigned int i;
+
+	fprintf(fp, "environment %s {\n", env->name);
+
+	for (i = 0; i < env->provides.count; ++i)
+		fprintf(fp, "\tprovides %s\n", env->provides.data[i]);
+	for (i = 0; i < env->requires.count; ++i)
+		fprintf(fp, "\trequires %s\n", env->requires.data[i]);
+	if (env->provides.count || env->requires.count)
+		fprintf(fp, "\n");
+
+	for (layer = env->layers; layer; layer = layer->next) {
+		if (!__wormhole_layer_config_write(layer, fp))
+			ok = false;
+	}
+
+	return ok;
+}
+
+static bool
+__wormhole_config_write(const struct wormhole_config *cfg, FILE *fp)
+{
+	struct wormhole_environment_config *env;
+	struct wormhole_profile_config *profile;
+	bool ok = true;
+
+	for (env = cfg->environments; env; env = env->next) {
+		if (!__wormhole_environment_config_write(env, fp))
+			ok = false;
+	}
+
+	for (profile = cfg->profiles; profile; profile = profile->next) {
 		fprintf(fp, "\n");
 		fprintf(fp, "profile %s {\n", profile->name);
 		if (profile->wrapper)
@@ -398,6 +447,16 @@ autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
 			fprintf(fp, "\tcommand %s\n", profile->command);
 		fprintf(fp, "}\n");
 	}
+
+	return ok;
+}
+
+static bool
+autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
+{
+	bool ok = true;
+
+	ok = __wormhole_config_write(state->config, fp);
 
 	fflush(fp);
 	return ok;
@@ -1143,6 +1202,9 @@ wormhole_auto_profile(const char *root_path)
 		autoprofile_state_set_environment(&state, opt_environment_name);
 	else
 		autoprofile_state_set_environment(&state, pathutil_const_basename(root_path));
+
+	autoprofile_state_set_requires(&state, &opt_requires);
+	autoprofile_state_set_provides(&state, &opt_provides);
 
 	autoprofile_state_create_layer(&state, output_tree_root);
 
