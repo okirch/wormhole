@@ -597,6 +597,7 @@ wormhole_digger(int argc, char **argv)
 		trace("Using environment %s (type %d)", env->name, env->layer[0]->type);
 
 		env = wormhole_environment_new("digger", env);
+		strutil_array_append(&env->requires, opt_base_environment);
 	} else {
 		env = wormhole_environment_new("digger", NULL);
 	}

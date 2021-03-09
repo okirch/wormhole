@@ -33,7 +33,7 @@ struct wormhole_profile {
 
 	wormhole_environment_t *environment;
 
-	struct wormhole_profile_config *config;
+	const struct wormhole_profile_config *config;
 };
 
 extern bool			wormhole_profiles_configure(struct wormhole_config *);

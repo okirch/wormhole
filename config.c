@@ -62,7 +62,7 @@ static void		parser_error(struct parser_state *, const char *, ...);
 static void		parser_warning(struct parser_state *, const char *, ...);
 static const char *	parser_check_obsolete_keyword(struct parser_state *, const char *kwd, struct parser_obsolete_kwd *);
 
-static struct wormhole_config *__wormhole_config_new(void);
+static struct wormhole_config *__wormhole_config_new(const char *path);
 
 static bool		wormhole_config_process_file(struct wormhole_config *cfg, const char *filename, struct parser_state *included_from);
 static bool		wormhole_config_process_include(struct wormhole_config *cfg, struct parser_state *included_from);
@@ -74,15 +74,50 @@ static void		wormhole_profile_config_free(struct wormhole_profile_config *profil
 static void		wormhole_environment_config_free(struct wormhole_environment_config *env);
 
 
+const struct wormhole_config *
+wormhole_config_get(const char *filename)
+{
+	static struct wormhole_config *known_configs = NULL;
+	struct wormhole_config **pos, *cfg;
+
+	for (pos = &known_configs; (cfg = *pos) != NULL; pos = &cfg->next) {
+		if (strutil_equal(cfg->path, filename))
+			return cfg; /* I've seen you before */
+	}
+
+	trace("Loading configuration from %s", filename);
+	if (!(cfg = wormhole_config_load(filename))) {
+		log_error("Failed to load config file %s", filename);
+		return NULL;
+	}
+
+	*pos = cfg;
+	return cfg;
+}
+
 struct wormhole_config *
 wormhole_config_load(const char *filename)
 {
 	struct wormhole_config *cfg;
+	struct wormhole_environment_config *env;
 
-	cfg = __wormhole_config_new();
+	cfg = __wormhole_config_new(filename);
 	if (!wormhole_config_process_file(cfg, filename, NULL)) {
 		wormhole_config_free(cfg);
 		return NULL;
+	}
+
+	for (env = cfg->environments; env; env = env->next) {
+		struct wormhole_layer_config *layer;
+		char pathbuf[PATH_MAX];
+
+		for (layer = env->layers; layer; layer = layer->next) {
+			if (layer->directory && layer->directory[0] != '/') {
+				snprintf(pathbuf, sizeof(pathbuf), "%s/%s",
+						pathutil_dirname(filename), layer->directory);
+				strutil_set(&layer->directory, pathbuf);
+			}
+		}
 	}
 
 	return cfg;
@@ -92,11 +127,12 @@ wormhole_config_load(const char *filename)
  * toplevel config object
  */
 static struct wormhole_config *
-__wormhole_config_new(void)
+__wormhole_config_new(const char *filename)
 {
 	struct wormhole_config *cfg;
 
 	cfg = calloc(1, sizeof(*cfg));
+	strutil_set(&cfg->path, filename);
 	strutil_set(&cfg->client_path, WORMHOLE_CLIENT_PATH);
 	return cfg;
 }

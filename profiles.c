@@ -119,7 +119,7 @@ wormhole_profiles_configure(struct wormhole_config *cfg)
 }
 
 wormhole_environment_t *
-__wormhole_environment_from_config(struct wormhole_environment_config *cfg)
+__wormhole_environment_from_config(const struct wormhole_environment_config *cfg)
 {
 	wormhole_environment_t *env;
 
@@ -142,7 +142,7 @@ __wormhole_environment_add_layer(wormhole_environment_t *env, struct wormhole_la
 }
 
 static bool
-__wormhole_environment_chase_layers(wormhole_environment_t *env, struct wormhole_environment_config *env_cfg)
+__wormhole_environment_chase_layers(wormhole_environment_t *env, const struct wormhole_environment_config *env_cfg)
 {
 	struct wormhole_layer_config *layer;
 
@@ -186,9 +186,12 @@ __wormhole_profiles_configure_environments(struct wormhole_environment_config *l
 	}
 
 	for (env = wormhole_environments; env; env = env->next) {
+		/* We expose the "provides" of the topmost environment. */
+		strutil_array_append_array(&env->provides, &env->config->provides);
 
 		if (!__wormhole_environment_chase_layers(env, env->config))
 			success = false;
+		strutil_array_append_array(&env->requires, &env->config->requires);
 	}
 
 	return success;
@@ -245,8 +248,130 @@ wormhole_profile_new(const char *name)
 	return profile;
 }
 
+/*
+ * Find a profile for a given command
+ */
+static const struct wormhole_config *
+__wormhole_config_for_command(const char *argv0)
+{
+	const char *id;
+	char *config_path;
+
+	id = pathutil_const_basename(argv0);
+	if (!(config_path = wormhole_command_get_best_match(id)))
+		return NULL;
+
+	trace("%s: found config file at %s", argv0, config_path);
+	return wormhole_config_get(config_path);
+}
+
+static const struct wormhole_profile_config *
+__wormhole_profile_config_for_command(const struct wormhole_config *cfg, const char *argv0)
+{
+	struct wormhole_profile_config *cmd_cfg;
+
+	if (argv0[0] == '/') {
+		for (cmd_cfg = cfg->profiles; cmd_cfg; cmd_cfg = cmd_cfg->next) {
+			if (strutil_equal(cmd_cfg->wrapper, argv0))
+				return cmd_cfg;
+		}
+	} else {
+		const char *name = pathutil_const_basename(argv0);
+
+		if (!name || !*name)
+			return NULL;
+
+		for (cmd_cfg = cfg->profiles; cmd_cfg; cmd_cfg = cmd_cfg->next) {
+			if (strutil_equal(pathutil_const_basename(cmd_cfg->wrapper), name))
+				return cmd_cfg;
+		}
+	}
+
+	log_error("Configuration file %s should provide a definition for command %s but doesn't",
+			cfg->path, argv0);
+	return NULL;
+}
+
+static const struct wormhole_environment_config *
+__wormhole_environment_config_for_command(const struct wormhole_config *cfg, const struct wormhole_profile_config *cmd_cfg)
+{
+	struct wormhole_environment_config *env_cfg = NULL;
+
+	if (cfg->environments == NULL) {
+		log_error("Configuration file %s does not provide any environments", cfg->path);
+		return NULL;
+	}
+
+	if (cmd_cfg->environment == NULL) {
+		/* Profile does not explicitly specify an environment. If the config file
+		 * contains just a single environment, assume that this is the one. */
+		env_cfg = cfg->environments;
+		if (env_cfg->next != NULL) {
+			log_error("Configuration file %s: cannot determine which environment to use for command %s",
+					cfg->path, cmd_cfg->wrapper);
+			return NULL;
+		}
+
+		return env_cfg;
+	}
+
+	for (env_cfg = cfg->environments; env_cfg; env_cfg = env_cfg->next) {
+		if (strutil_equal(env_cfg->name, cmd_cfg->environment))
+			return env_cfg;
+	}
+
+	log_error("Configuration file %s should provide a definition for environment %s but doesn't",
+			cfg->path, cmd_cfg->environment);
+	return NULL;
+}
+
+static bool
+__wormhole_profile_configure_environment(wormhole_profile_t *profile, const struct wormhole_config *cfg)
+{
+	const struct wormhole_environment_config *env_cfg;
+
+	if (!(env_cfg = __wormhole_environment_config_for_command(cfg, profile->config)))
+		return false;
+
+	/* Now put everything together */
+	profile->environment = __wormhole_environment_from_config(env_cfg);
+	if (!__wormhole_environment_chase_layers(profile->environment, env_cfg))
+		return false;
+
+	return true;
+}
+
 wormhole_profile_t *
 wormhole_profile_find(const char *argv0)
+{
+	const struct wormhole_config *cfg;
+	const struct wormhole_profile_config *cmd_cfg;
+	wormhole_profile_t *profile = NULL;
+
+	if (!(cfg = __wormhole_config_for_command(argv0)))
+		return NULL;
+
+	if (!(cmd_cfg = __wormhole_profile_config_for_command(cfg, argv0)))
+		return NULL;
+
+	profile = wormhole_profile_new(cmd_cfg->name);
+	profile->config = cmd_cfg;
+
+	if (!__wormhole_profile_configure_environment(profile, cfg))
+		goto failed;
+
+	return profile;
+
+failed:
+#ifdef fix_this_memory_leak
+	if (profile)
+		wormhole_profile_free(profile);
+#endif
+	return NULL;
+}
+
+wormhole_profile_t *
+wormhole_profile_find_old(const char *argv0)
 {
 	wormhole_profile_t *profile;
 	const char *name;
@@ -304,6 +429,9 @@ wormhole_environment_new(const char *name, const wormhole_environment_t *base_en
 
 		for (i = 0; i < base_env->nlayers; ++i)
 			__wormhole_environment_add_layer(env, base_env->layer[i]);
+
+		strutil_array_append_array(&env->requires, &base_env->requires);
+		strutil_array_append_array(&env->requires, &base_env->provides);
 	}
 
 	return env;

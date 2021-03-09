@@ -65,12 +65,21 @@ struct wormhole_environment_config {
 };
 
 struct wormhole_config {
+	struct wormhole_config *next;
+
+	/* Path the config file was loaded from */
+	char *			path;
+
+	/* Pathname to the wormhole client 
+	 * XXX is this really needed?
+	 */
 	char *			client_path;
 
 	struct wormhole_profile_config *profiles;
 	struct wormhole_environment_config *environments;
 };
 
+extern const struct wormhole_config *wormhole_config_get(const char *filename);
 extern struct wormhole_config *	wormhole_config_load(const char *filename);
 extern void			wormhole_config_free(struct wormhole_config *cfg);
 

@@ -84,7 +84,10 @@ struct wormhole_environment {
 	wormhole_environment_t *next;
 	char *			name;
 
-	struct wormhole_environment_config *config;
+	const struct wormhole_environment_config *config;
+
+	struct strutil_array	provides;
+	struct strutil_array	requires;
 
 	/* Directory where we assemble the root of the container's
 	 * file system.
@@ -159,6 +162,7 @@ extern char *			wormhole_capability_get_best_match(const char *id);
 extern bool			wormhole_capabilities_gc(void);
 extern bool			wormhole_command_register(const struct strutil_array *names, const char *path);
 extern bool			wormhole_command_unregister(const struct strutil_array *names, const char *path);
+extern char *			wormhole_command_get_best_match(const char *id);
 
 extern wormhole_tree_state_t *	wormhole_get_mount_state(const char *mtab);
 

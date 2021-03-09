@@ -499,7 +499,8 @@ wormhole_capability_get_path(const char *capability_dir_path, char **path_var, c
 
 	snprintf(pathbuf, sizeof(pathbuf), "%s/%s", capability_dir_path, name);
 	if (!realpath(pathbuf, resolved_path)) {
-		log_warning("Dangling capability link %s", pathbuf);
+		if (errno != ENOENT)
+			log_warning("Dangling capability link %s", pathbuf);
 		return false;
 	}
 
@@ -572,4 +573,27 @@ wormhole_capability_get_best_match(const char *id)
 {
 	/* FIXME: support per-user capability directory. */
 	return __wormhole_capability_get_best_match(WORMHOLE_CAPABILITY_PATH, id);
+}
+
+/*
+ * Command lookup.
+ * For now, this is a lot more simplistic than the capability lookup.
+ * We expect just a single version of a given command to be active.
+ */
+char *
+__wormhole_command_get_best_match(const char *capability_dir_path, const char *id)
+{
+	char *best_path = NULL;
+
+	if (!wormhole_capability_get_path(capability_dir_path, &best_path, id))
+		return NULL;
+
+	return best_path;
+}
+
+char *
+wormhole_command_get_best_match(const char *id)
+{
+	/* FIXME: support per-user capability directory. */
+	return __wormhole_command_get_best_match(WORMHOLE_COMMAND_REGISTRY_PATH, id);
 }
