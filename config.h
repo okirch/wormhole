@@ -75,6 +75,9 @@ extern struct wormhole_config *	wormhole_config_load(const char *filename);
 extern void			wormhole_config_free(struct wormhole_config *cfg);
 
 extern wormhole_path_info_t *	wormhole_layer_config_add_path(struct wormhole_layer_config *layer, int type, const char *path);
+extern bool			wormhole_path_info_set_mount_fstype(wormhole_path_info_t *pi, const char *fstype);
+extern bool			wormhole_path_info_set_mount_device(wormhole_path_info_t *pi, const char *device);
+extern bool			wormhole_path_info_set_mount_options(wormhole_path_info_t *pi, const char *options);
 
 #endif // _WORMHOLE_CONFIG_H
 

@@ -226,7 +226,7 @@ wormhole_layer_config_add_path(struct wormhole_layer_config *layer, int type, co
 	return pi;
 }
 
-static bool
+bool
 wormhole_path_info_set_mount_fstype(wormhole_path_info_t *pi, const char *fstype)
 {
 	if (pi->type != WORMHOLE_PATH_TYPE_MOUNT) {
@@ -238,7 +238,7 @@ wormhole_path_info_set_mount_fstype(wormhole_path_info_t *pi, const char *fstype
 	return true;
 }
 
-static bool
+bool
 wormhole_path_info_set_mount_device(wormhole_path_info_t *pi, const char *device)
 {
 	if (pi->type != WORMHOLE_PATH_TYPE_MOUNT) {
@@ -250,7 +250,7 @@ wormhole_path_info_set_mount_device(wormhole_path_info_t *pi, const char *device
 	return true;
 }
 
-static bool
+bool
 wormhole_path_info_set_mount_options(wormhole_path_info_t *pi, const char *options)
 {
 	if (pi->type != WORMHOLE_PATH_TYPE_MOUNT) {
