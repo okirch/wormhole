@@ -45,6 +45,8 @@ enum {
 	OPT_PROFILE,
 	OPT_REQUIRES,
 	OPT_PROVIDES,
+	OPT_CHECK_BINARIES,
+	OPT_WRAPPER_DIRECTORY,
 };
 
 struct option wormhole_options[] = {
@@ -59,6 +61,8 @@ struct option wormhole_options[] = {
 	{ "profile",		required_argument,	NULL,	OPT_PROFILE },
 	{ "requires",		required_argument,	NULL,	OPT_REQUIRES },
 	{ "provides",		required_argument,	NULL,	OPT_PROVIDES },
+	{ "wrapper-directory",	required_argument,	NULL,	OPT_WRAPPER_DIRECTORY },
+	{ "check-binaries",	required_argument,	NULL,	OPT_CHECK_BINARIES },
 
 	/* obsolete/internal */
 	{ "create-exclude-list",required_argument,	NULL,	'X' },
@@ -71,6 +75,8 @@ const char *		opt_environment_name = NULL;
 const char *		opt_output = NULL;
 const char *		opt_profile = "default";
 const char *		opt_exclude_file = NULL;
+const char *		opt_wrapper_directory = NULL;
+struct strutil_array	opt_check_binaries;
 bool			opt_quiet = false;
 struct strutil_array	opt_provides;
 struct strutil_array	opt_requires;
@@ -80,7 +86,10 @@ static void		usage(int exval);
 
 struct autoprofile_state {
 	wormhole_tree_state_t *		tree;
+
+	char *				environment_name;
 	struct wormhole_layer_config *	layer;
+	struct wormhole_profile_config *profiles;
 };
 
 int
@@ -127,6 +136,14 @@ main(int argc, char **argv)
 
 		case OPT_OUTPUT_FILE:
 			opt_output = optarg;
+			break;
+
+		case OPT_WRAPPER_DIRECTORY:
+			opt_wrapper_directory = optarg;
+			break;
+
+		case OPT_CHECK_BINARIES:
+			strutil_array_append(&opt_check_binaries, optarg);
 			break;
 
 		case 'X':
@@ -250,16 +267,18 @@ autoprofile_state_init(struct autoprofile_state *state, const char *tree_root)
 	memset(state, 0, sizeof(*state));
 
 	state->tree = wormhole_tree_state_new();
-        wormhole_tree_state_set_root(state->tree, tree_root);
+	wormhole_tree_state_set_root(state->tree, tree_root);
 }
 
 static bool
-dump_config(FILE *fp, const char *env_name, struct wormhole_layer_config *output)
+dump_config(struct autoprofile_state *state, FILE *fp)
 {
+	struct wormhole_layer_config *output = state->layer;
+	struct wormhole_profile_config *profile;
 	unsigned int i;
 	bool ok = true;
 
-	fprintf(fp, "environment %s {\n", env_name);
+	fprintf(fp, "environment %s {\n", state->environment_name);
 
 	for (i = 0; i < opt_provides.count; ++i)
 		fprintf(fp, "\tprovides %s\n", opt_provides.data[i]);
@@ -314,6 +333,18 @@ dump_config(FILE *fp, const char *env_name, struct wormhole_layer_config *output
 	}
 	fprintf(fp, "\t}\n");
 	fprintf(fp, "}\n");
+
+	for (profile = state->profiles; profile; profile = profile->next) {
+		fprintf(fp, "\n");
+		fprintf(fp, "profile %s {\n", profile->name);
+		if (profile->wrapper)
+			fprintf(fp, "\twrapper %s\n", profile->wrapper);
+		if (profile->environment)
+			fprintf(fp, "\tenvironment %s\n", profile->environment);
+		if (profile->command)
+			fprintf(fp, "\tcommand %s\n", profile->command);
+		fprintf(fp, "}\n");
+	}
 
 	return ok;
 }
@@ -552,6 +583,50 @@ perform_mount_tmpfs(struct autoprofile_state *state, const char *arg)
 	return true;
 }
 
+static bool
+perform_check_binaries(struct autoprofile_state *state, const char *arg)
+{
+	wormhole_tree_state_t *tree = state->tree;
+	const char *path = __build_path(tree, arg);
+	DIR *dir;
+	struct dirent *d;
+
+	if (!opt_wrapper_directory)
+		return true;
+
+	if (!(dir = opendir(path)))
+		return true;
+
+	__make_path_push();
+	while ((d = readdir(dir)) != NULL) {
+		struct wormhole_profile_config *profile;
+		char entry_path[PATH_MAX];
+
+		if (d->d_name[0] == '.')
+			continue;
+
+		snprintf(entry_path, sizeof(entry_path), "%s/%s", arg, d->d_name);
+		if (!fsutil_is_executable(__build_path(tree, entry_path)))
+			continue;
+
+		trace("Found binary %s", entry_path);
+
+		profile = calloc(1, sizeof(*profile));
+		strutil_set(&profile->name, d->d_name);
+		strutil_set(&profile->command, entry_path);
+		strutil_set(&profile->environment, state->environment_name);
+		strutil_set(&profile->wrapper, __make_path(opt_wrapper_directory, d->d_name));
+
+		profile->next = state->profiles;
+		state->profiles = profile;
+	}
+	__make_path_pop();
+
+	closedir(dir);
+
+	return true;
+}
+
 struct action {
 	struct action *	next;
 
@@ -634,7 +709,7 @@ __autoprofile_add_action(struct autoprofile_config *config, unsigned int lineno,
 }
 
 struct autoprofile_config *
-load_autoprofile_config(const char *profile)
+load_autoprofile_config(const char *profile, const struct strutil_array *extra_check_binaries)
 {
 	static struct action_keyword {
 		const char *		name;
@@ -651,6 +726,7 @@ load_autoprofile_config(const char *profile)
 		{ "ignore-empty-subdirs",	perform_ignore_empty_subdirs },
 		{ "ignore",			perform_ignore },
 		{ "mount-tmpfs",		perform_mount_tmpfs },
+		{ "check-binaries",		perform_check_binaries },
 		{ NULL }
 	};
 	const char *filename;
@@ -726,6 +802,17 @@ load_autoprofile_config(const char *profile)
 	}
 
 	fclose(fp);
+
+	if (extra_check_binaries) {
+		unsigned int i;
+
+		for (i = 0; i < extra_check_binaries->count; ++i) {
+			const char *path = extra_check_binaries->data[i];
+
+			__autoprofile_add_action(config, 0, path, perform_check_binaries);
+		}
+	}
+
 	return config;
 
 failed:
@@ -969,12 +1056,16 @@ wormhole_auto_profile(const char *root_path)
 		}
 	}
 
-	config = load_autoprofile_config(opt_profile);
+	config = load_autoprofile_config(opt_profile, &opt_check_binaries);
 	if (config == NULL)
 		return 1;
 
 	autoprofile_state_init(&state, tree_root);
 	state.layer = alloc_layer_config(output_tree_root);
+
+	if ((env_name = opt_environment_name) == NULL)
+		env_name = pathutil_const_basename(root_path);
+	strutil_set(&state.environment_name, env_name);
 
 	if (!perform(config, &state))
 		return 1;
@@ -984,9 +1075,6 @@ wormhole_auto_profile(const char *root_path)
 			return 1;
 	}
 
-	if ((env_name = opt_environment_name) == NULL)
-		env_name = pathutil_const_basename(root_path);
-
 	if (opt_output != NULL && strcmp(opt_output, "-")) {
 		if (!strcmp(opt_output, "auto"))
 			log_fatal("Don't know where to write output file (you requested \"auto\" mode)");
@@ -995,12 +1083,12 @@ wormhole_auto_profile(const char *root_path)
 		if (fp == NULL)
 			log_fatal("Unable to open %s for writing: %m", opt_output);
 
-		dump_config(fp, env_name,  state.layer);
+		dump_config(&state, fp);
 		fclose(fp);
 
 		printf("Environment definition written to %s\n", opt_output);
 	} else {
-		dump_config(stdout, env_name,  state.layer);
+		dump_config(&state, stdout);
 		fflush(stdout);
 	}
 

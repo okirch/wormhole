@@ -551,6 +551,23 @@ fsutil_exists_nofollow(const char *path)
 }
 
 bool
+fsutil_is_executable(const char *path)
+{
+	struct stat stb;
+
+	if (stat(path, &stb) < 0)
+		return false;
+
+	if (!S_ISREG(stb.st_mode))
+		return false;
+
+	if (!(stb.st_mode & S_IXUSR))
+		return false;
+
+	return true;
+}
+
+bool
 fsutil_dir_is_empty(const char *path)
 {
 	bool empty = true;
