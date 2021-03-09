@@ -178,7 +178,17 @@ usage(int exval)
 		"  --output-file <path>\n"
 		"     Location to write the configuration file to (or \"auto\")\n"
 		"  --base-environment <name>\n"
-		"     FFU.\n"
+		"     The wormhole image/environment the new layer was based on\n"
+		"  --environment-name <name>\n"
+		"     Name of the environment to define (defaults to base name of --overlay-directory)\n"
+		"  --requires <id>\n"
+		"     Capability string will be copied to the generated config file\n"
+		"  --provides <id>\n"
+		"     Capability string will be copied to the generated config file\n"
+		"  --check-binaries <path>\n"
+		"     In addition to any directories listed in the profile, inspect the indicated path for executables\n"
+		"  --wrapper-directory <path>\n"
+		"     When auto-detecting executables, wrappers should be placed in the specified directory\n"
 	);
 	exit(exval);
 }
@@ -1062,6 +1072,9 @@ wormhole_auto_profile(const char *root_path)
 	const char *tree_root, *output_tree_root;
 	struct autoprofile_config *config;
 	struct autoprofile_state state;
+
+	if (opt_base_environment)
+		log_fatal("The --base-environment option is not yet implemented");
 
 	tree_root = root_path;
 	output_tree_root = root_path;
