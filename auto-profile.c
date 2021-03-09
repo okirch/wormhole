@@ -282,7 +282,21 @@ dump_config(FILE *fp, const char *env_name, struct wormhole_layer_config *output
 			continue;
 		}
 
-		fprintf(fp, "\t\t%s %s\n", action, pi->path);
+		switch (pi->type) {
+		case WORMHOLE_PATH_TYPE_MOUNT:
+			fprintf(fp, "\t\t%s %s", action, pi->path);
+			if (pi->mount.fstype)
+				fprintf(fp, " %s", pi->mount.fstype);
+			if (pi->mount.device)
+				fprintf(fp, " %s", pi->mount.device);
+			if (pi->mount.options)
+				fprintf(fp, " %s", pi->mount.options);
+			fputs("\n", fp);
+			break;
+		default:
+			fprintf(fp, "\t\t%s %s\n", action, pi->path);
+			break;
+		}
 	}
 	fprintf(fp, "\t}\n");
 	fprintf(fp, "}\n");
@@ -495,6 +509,25 @@ perform_check_ldconfig(wormhole_tree_state_t *tree, const char *arg, struct worm
 	return true;
 }
 
+static bool
+perform_mount_tmpfs(wormhole_tree_state_t *tree, const char *arg, struct wormhole_layer_config *output)
+{
+	const char *path = __build_path(tree, arg);
+	wormhole_path_info_t *pi;
+
+	if (!fsutil_isdir(path))
+		return true;
+
+	if (!opt_quiet)
+		log_info("Mounting tmpfs on %s", arg);
+
+	pi = wormhole_layer_config_add_path(output, WORMHOLE_PATH_TYPE_MOUNT, arg);
+	wormhole_path_info_set_mount_fstype(pi, "tmpfs");
+	wormhole_tree_state_set_system_mount(tree, arg, "tmpfs", NULL);
+
+	return true;
+}
+
 struct action {
 	struct action *	next;
 
@@ -525,6 +558,7 @@ action_free(struct action *a)
 struct autoprofile_config {
 	char *		filename;
 	int		env_type;
+	bool		ignore_stray_files;
 	struct action *	actions;
 };
 
@@ -600,6 +634,11 @@ load_autoprofile_config(const char *profile)
 
 		arg = strtok(NULL, " \t");
 
+		if (strutil_equal(kwd, "ignore") && strutil_equal(arg, "strays")) {
+			config->ignore_stray_files = true;
+			continue;
+		}
+
 		if (!strcmp(kwd, "environment-type")) {
 			if (!strcmp(arg, "image")) {
 				config->env_type = WORMHOLE_LAYER_TYPE_IMAGE;
@@ -644,6 +683,9 @@ load_autoprofile_config(const char *profile)
 		} else
 		if (!strcmp(kwd, "ignore")) {
 			a->perform = perform_ignore;
+		} else
+		if (!strcmp(kwd, "mount-tmpfs")) {
+			a->perform = perform_mount_tmpfs;
 		} else {
 			log_error("%s line %u: unknown keyword \"%s\"", filename, lineno, kwd);
 			goto failed;
@@ -907,8 +949,10 @@ wormhole_auto_profile(const char *root_path)
 	if (!perform(config, real_tree, output))
 		return 1;
 
-	if (!check_for_stray_files(real_tree))
-		return 1;
+	if (!config->ignore_stray_files) {
+		if (!check_for_stray_files(real_tree))
+			return 1;
+	}
 
 	if ((env_name = opt_environment_name) == NULL)
 		env_name = pathutil_const_basename(root_path);
