@@ -33,20 +33,20 @@
 #include "tracing.h"
 
 enum {
-	OPT_BASE_ENVIRONMENT,
-	OPT_OVERLAY_ROOT,
-	OPT_PRIVILEGED_NAMESPACE,
-	OPT_CLEAN,
-	OPT_BIND_MOUNT_TYPE,
-	OPT_BUILD_SCRIPT,
-	OPT_BUILD_DIRECTORY,
+	OPT_FORCE,
+	OPT_NO_PROFILE,
 };
 
 struct option wormhole_options[] = {
 	{ "help",		no_argument,		NULL,	'h' },
 	{ "debug",		no_argument,		NULL,	'd' },
+	{ "force",		no_argument,		NULL,	OPT_FORCE },
+	{ "no-profile",		no_argument,		NULL,	OPT_NO_PROFILE },
 	{ NULL }
 };
+
+static bool		opt_force = false;
+static bool		opt_install_profile = true;
 
 static bool		wormhole_capability(int argc, char **argv);
 static void		usage(int exval);
@@ -63,6 +63,14 @@ main(int argc, char **argv)
 
 		case 'd':
 			tracing_increment_level();
+			break;
+
+		case OPT_FORCE:
+			opt_force = true;
+			break;
+
+		case OPT_NO_PROFILE:
+			opt_install_profile = false;
 			break;
 
 		default:
@@ -115,29 +123,191 @@ __check_expected_args(const char *action, int argc, unsigned int num_expected)
 }
 
 static bool
-__get_capabilities(const char *path, struct strutil_array *provides)
+__get_capabilities(struct wormhole_config *config, struct strutil_array *provides)
 {
-	struct wormhole_config *config;
 	struct wormhole_environment_config *env_cfg;
+
+	for (env_cfg = config->environments; env_cfg; env_cfg = env_cfg->next) {
+		strutil_array_append_array(provides, &env_cfg->provides);
+	}
+
+	return true;
+}
+
+static bool
+__get_commands(struct wormhole_config *config, struct strutil_array *commands, struct strutil_array *names)
+{
+	struct wormhole_profile_config *cmd_cfg;
+
+	for (cmd_cfg = config->profiles; cmd_cfg; cmd_cfg = cmd_cfg->next) {
+		const char *wrapper = cmd_cfg->wrapper;
+
+		if (wrapper != NULL) {
+			strutil_array_append(commands, wrapper);
+			strutil_array_append(names, pathutil_const_basename(wrapper));
+		}
+	}
+
+	return true;
+}
+
+/*
+ * Create all wrapper symlinks pointing to /usr/bin/wormhole
+ */
+static bool
+__create_wrappers(const struct strutil_array *commands, const char *client_path)
+{
+	unsigned int i;
+
+	for (i = 0; i < commands->count; ++i) {
+		const char *path = commands->data[i];
+
+		if (fsutil_exists(path)) {
+			if (fsutil_same_file(path, client_path)) {
+				trace("%s already exists, nothing to be done", path);
+				continue;
+			}
+
+			if (opt_force) {
+				if (unlink(path) >= 0) {
+					trace("force removed %s", path);
+					continue;
+				}
+				trace("failed to force remove %s: %m", path);
+			}
+
+			log_error("%s exists, but does not point to %s", path, client_path);
+			return false;
+		}
+
+		if (symlink(client_path, path) < 0) {
+			log_error("Unable to create symbolic link %s: %m", path);
+			return false;
+		}
+
+		trace("Created wrapper symlink %s -> %s", path, client_path);
+	}
+
+	return true;
+}
+
+/*
+ * Remove wrapper symlinks
+ */
+static bool
+__remove_wrappers(const struct strutil_array *commands, const char *client_path)
+{
+	unsigned int i;
+	bool ok = true;
+
+	for (i = 0; i < commands->count; ++i) {
+		const char *path = commands->data[i];
+
+		if (!fsutil_exists(path))
+			continue;
+
+		if (!fsutil_same_file(path, client_path)) {
+			log_error("%s exists, but does not point to %s", path, client_path);
+			ok = false;
+			continue;
+		}
+
+		if (unlink(path) >= 0) {
+			trace("removed wrapper symlink %s", path);
+			continue;
+		}
+
+		log_error("unable to remove wrapper symlink %s: %m", path);
+		ok = false;
+	}
+
+	return ok;
+}
+
+static bool
+__capabilities_install(const char *path)
+{
+	struct strutil_array provides;
+	struct strutil_array commands;
+	struct strutil_array names;
+	struct wormhole_config *config;
 
 	if (!(config = wormhole_config_load(path))) {
 		log_error("Unable to read %s", path);
 		return false;
 	}
 
-	for (env_cfg = config->environments; env_cfg; env_cfg = env_cfg->next) {
-		strutil_array_append_array(provides, &env_cfg->provides);
+	strutil_array_init(&provides);
+	strutil_array_init(&commands);
+	strutil_array_init(&names);
+
+	if (!__get_capabilities(config, &provides))
+		return false;
+
+	if (!wormhole_capability_register(&provides, path))
+		return false;
+
+	if (opt_install_profile) {
+		if (!__get_commands(config, &commands, &names))
+			return false;
+
+		if (!wormhole_command_register(&names, path))
+			return false;
+
+		if (!__create_wrappers(&commands, WORMHOLE_CLIENT_PATH))
+			return false;
 	}
 
-	wormhole_config_free(config);
+	if (provides.count + commands.count == 0)
+		log_warning("%s does not provide any capabilities or commands, nothing to be done", path);
+
+	return true;
+}
+
+static bool
+__capabilities_uninstall(const char *path)
+{
+	struct strutil_array provides;
+	struct strutil_array commands;
+	struct strutil_array names;
+	struct wormhole_config *config;
+
+	if (!(config = wormhole_config_load(path))) {
+		log_error("Unable to read %s", path);
+		return false;
+	}
+
+	strutil_array_init(&provides);
+	strutil_array_init(&commands);
+	strutil_array_init(&names);
+
+	if (!__get_capabilities(config, &provides))
+		return false;
+
+	if (!wormhole_capability_unregister(&provides, path))
+		return false;
+
+	if (opt_install_profile) {
+		if (!__get_commands(config, &commands, &names))
+			return false;
+
+		if (!wormhole_command_unregister(&names, path))
+			return false;
+
+		if (!__remove_wrappers(&commands, WORMHOLE_CLIENT_PATH))
+			return false;
+	}
+
+	if (provides.count + commands.count == 0)
+		log_warning("%s does not provide any capabilities or commands, nothing to be done", path);
+
 	return true;
 }
 
 static bool
 wormhole_capability(int argc, char **argv)
 {
-	const char *action, *path;
-	struct strutil_array provides;
+	const char *action;
 
 	if (argc == 0) {
 		log_error("wormhole-capability: missing action");
@@ -151,37 +321,18 @@ wormhole_capability(int argc, char **argv)
 		return wormhole_capabilities_gc();
 	}
 
-	strutil_array_init(&provides);
 	if (!strcmp(action, "activate")) {
 		if (!__check_expected_args(action, argc, 1))
 			return false;
 
-		path = argv[1];
-		if (!__get_capabilities(path, &provides))
-			return false;
-
-		if (provides.count == 0) {
-			log_warning("%s does not provide any capabilities, nothing to be done", path);
-			return true;
-		}
-
-		return wormhole_capability_register(&provides, path);
+		return __capabilities_install(argv[1]);
 	}
 
 	if (!strcmp(action, "deactivate")) {
 		if (!__check_expected_args(action, argc, 1))
 			return false;
 
-		path = argv[1];
-		if (!__get_capabilities(path, &provides))
-			return false;
-
-		if (provides.count == 0) {
-			log_warning("%s does not provide any capabilities, nothing to be done", path);
-			return true;
-		}
-
-		return wormhole_capability_unregister(&provides, path);
+		return __capabilities_uninstall(argv[1]);
 	}
 
 	log_error("wormhole-capability: unsupported action \"%s\"", action);

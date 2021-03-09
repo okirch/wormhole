@@ -157,6 +157,8 @@ extern bool			wormhole_capability_register(const struct strutil_array *provides,
 extern bool			wormhole_capability_unregister(const struct strutil_array *provides, const char *path);
 extern char *			wormhole_capability_get_best_match(const char *id);
 extern bool			wormhole_capabilities_gc(void);
+extern bool			wormhole_command_register(const struct strutil_array *names, const char *path);
+extern bool			wormhole_command_unregister(const struct strutil_array *names, const char *path);
 
 extern wormhole_tree_state_t *	wormhole_get_mount_state(const char *mtab);
 

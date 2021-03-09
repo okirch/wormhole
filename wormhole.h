@@ -28,6 +28,7 @@
 #define WORMHOLE_CLIENT_PATH		"/usr/bin/wormhole"
 
 #define WORMHOLE_CAPABILITY_PATH	"/var/lib/wormhole/capability"
+#define WORMHOLE_COMMAND_REGISTRY_PATH	"/var/lib/wormhole/command"
 
 extern void		wormhole_common_load_config(const char *opt_config_path);
 

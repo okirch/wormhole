@@ -249,7 +249,7 @@ wormhole_capability_parse(const char *id)
 /*
  * Install capability
  */
-bool
+static bool
 __wormhole_capability_register(const char *capability_dir_path, const struct strutil_array *provides, const char *path)
 {
 	struct strutil_array install;
@@ -311,6 +311,9 @@ wormhole_capability_register(const struct strutil_array *provides, const char *p
 {
 	char real_path[PATH_MAX];
 
+	if (provides->count == 0)
+		return true;
+
 	/* Make sure we use a fully qualified path as symlink target */
 	if (realpath(path, real_path) == NULL) {
 		log_error("%s is not a valid path: %m", path);
@@ -320,6 +323,25 @@ wormhole_capability_register(const struct strutil_array *provides, const char *p
 
 	/* FIXME: support per-user capability directory. */
 	return __wormhole_capability_register(WORMHOLE_CAPABILITY_PATH, provides, path);
+}
+
+bool
+wormhole_command_register(const struct strutil_array *names, const char *path)
+{
+	char real_path[PATH_MAX];
+
+	if (names->count == 0)
+		return true;
+
+	/* Make sure we use a fully qualified path as symlink target */
+	if (realpath(path, real_path) == NULL) {
+		log_error("%s is not a valid path: %m", path);
+		return false;
+	}
+	path = real_path;
+
+	/* FIXME: support per-user capability directory. */
+	return __wormhole_capability_register(WORMHOLE_COMMAND_REGISTRY_PATH, names, path);
 }
 
 /*
@@ -382,6 +404,9 @@ wormhole_capability_unregister(const struct strutil_array *provides, const char 
 {
 	char real_path[PATH_MAX];
 
+	if (provides->count == 0)
+		return true;
+
 	/* Make sure we use a fully qualified path as symlink target */
 	if (realpath(path, real_path) == NULL) {
 		log_error("%s is not a valid path: %m", path);
@@ -391,6 +416,25 @@ wormhole_capability_unregister(const struct strutil_array *provides, const char 
 
 	/* FIXME: support per-user capability directory. */
 	return __wormhole_capability_unregister(WORMHOLE_CAPABILITY_PATH, provides, path);
+}
+
+bool
+wormhole_command_unregister(const struct strutil_array *names, const char *path)
+{
+	char real_path[PATH_MAX];
+
+	if (names->count == 0)
+		return true;
+
+	/* Make sure we use a fully qualified path as symlink target */
+	if (realpath(path, real_path) == NULL) {
+		log_error("%s is not a valid path: %m", path);
+		return false;
+	}
+	path = real_path;
+
+	/* FIXME: support per-user capability directory. */
+	return __wormhole_capability_unregister(WORMHOLE_COMMAND_REGISTRY_PATH, names, path);
 }
 
 /*
