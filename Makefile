@@ -34,7 +34,7 @@ LINK		= -L. -lwormhole -lutil
 LIB		= libwormhole.a
 LIB_SRCS	= common.c \
 		  profiles.c \
-		  imgcapability.c \
+		  registry.c \
 		  pathstate.c \
 		  mntent.c \
 		  runtime.c \
