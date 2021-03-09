@@ -254,7 +254,14 @@ dump_config(FILE *fp, const char *env_name, struct wormhole_layer_config *output
 	if (opt_provides.count || opt_requires.count)
 		fprintf(fp, "\n");
 
-	fprintf(fp, "\tdefine-layer {\n");
+	if (output->type == WORMHOLE_LAYER_TYPE_LAYER) {
+		fprintf(fp, "\tdefine-layer {\n");
+	} else if (output->type == WORMHOLE_LAYER_TYPE_IMAGE) {
+		fprintf(fp, "\tdefine-image {\n");
+	} else {
+		log_error("Don't know how to handle layer type %u", output->type);
+		return false;
+	}
 
 	fprintf(fp, "\t\tdirectory %s\n", output->directory);
 	fprintf(fp, "\n");
@@ -517,6 +524,7 @@ action_free(struct action *a)
 
 struct autoprofile_config {
 	char *		filename;
+	int		env_type;
 	struct action *	actions;
 };
 
@@ -527,6 +535,7 @@ autoprofile_config_new(const char *filename)
 
 	config = calloc(1, sizeof(*config));
 	config->filename = strdup(filename);
+	config->env_type = WORMHOLE_LAYER_TYPE_LAYER;
 	return config;
 }
 
@@ -591,6 +600,18 @@ load_autoprofile_config(const char *profile)
 
 		arg = strtok(NULL, " \t");
 
+		if (!strcmp(kwd, "environment-type")) {
+			if (!strcmp(arg, "image")) {
+				config->env_type = WORMHOLE_LAYER_TYPE_IMAGE;
+			} else if (!strcmp(arg, "layer")) {
+				config->env_type = WORMHOLE_LAYER_TYPE_LAYER;
+			} else {
+				log_error("%s line %u: bad %s \"%s\"", filename, lineno, kwd, arg);
+				goto failed;
+			}
+			continue;
+		}
+
 		a = *pos = action_new(arg);
 		pos = &a->next;
 
@@ -652,6 +673,7 @@ perform(struct autoprofile_config *config, wormhole_tree_state_t *tree, struct w
 		}
 	}
 
+	output->type = config->env_type;
 	return true;
 }
 
