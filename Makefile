@@ -26,6 +26,9 @@ AUTOPROF_CONF	= autoprofile-default.conf \
 		  autoprofile-image.conf
 AUTOPROF_SRCS	= auto-profile.c
 AUTOPROF_OBJS	= $(AUTOPROF_SRCS:.c=.o)
+CAPABILITY	= wormhole-capability
+CAPABILITY_SRCS	= capability.c
+CAPABILITY_OBJS	= $(CAPABILITY_SRCS:.c=.o)
 LINK		= -L. -lwormhole -lutil
 
 LIB		= libwormhole.a
@@ -47,7 +50,7 @@ MAN1PAGES	= wormhole.1 \
 #MAN5PAGES	= wormhole.conf.5
 #MAN8PAGES	= wormholed.8
 
-all: $(WORMHOLE) $(WORMHOLED) $(DIGGER) $(AUTOPROF)
+all: $(WORMHOLE) $(WORMHOLED) $(DIGGER) $(AUTOPROF) $(CAPABILITY)
 
 clean:
 	rm -f $(WORMHOLE)
@@ -90,6 +93,9 @@ $(DIGGER): $(DIGGER_OBJS) $(LIB)
 
 $(AUTOPROF): $(AUTOPROF_OBJS) $(LIB)
 	$(CC) $(CFLAGS) -o $@ $(AUTOPROF_OBJS) $(LINK)
+
+$(CAPABILITY): $(CAPABILITY_OBJS) $(LIB)
+	$(CC) $(CFLAGS) -o $@ $(CAPABILITY_OBJS) $(LINK)
 
 $(LIB): $(LIB_OBJS)
 	$(AR) crv $@  $(LIB_OBJS)

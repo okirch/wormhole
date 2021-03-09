@@ -241,26 +241,152 @@ wormhole_capability_parse(const char *id)
  * Install capability
  */
 bool
-__wormhole_capability_install(const char *capability_dir_path, const char *id, const char *path)
+__wormhole_capability_install(const char *capability_dir_path, const struct strutil_array *provides, const char *path)
 {
-	char pathbuf[PATH_MAX];
+	struct strutil_array install;
+	unsigned int i;
+	DIR *dir;
+	bool ok;
 
-	snprintf(pathbuf, sizeof(pathbuf), "%s/%s", capability_dir_path, id);
-	if (symlink(path, pathbuf) < 0) {
-		log_error("Unable to create symbolic link %s: %m", pathbuf);
+	if (!(dir = opendir(capability_dir_path))) {
+		log_error("Unable to open %s: %m", capability_dir_path);
 		return false;
 	}
 
-	return true;
+	strutil_array_init(&install);
+
+	for (i = 0; i < provides->count; ++i) {
+		const char *id = provides->data[i];
+		char target[PATH_MAX];
+
+		if (readlinkat(dirfd(dir), id, target, sizeof(target)) >= 0) {
+			if (strutil_equal(path, target)) {
+				trace("Capability %s already installed, nothing to activate", id);
+				continue;
+			}
+
+			log_error("Capability %s already provided by %s", id, target);
+			goto failed;
+		}
+
+		if (errno != ENOENT) {
+			log_error("Something's wrong with %s/%s: readlink failed: %m", capability_dir_path, id);
+			goto failed;
+		}
+
+		strutil_array_append(&install, id);
+	}
+
+	for (i = 0; i < install.count; ++i) {
+		const char *id = install.data[i];
+
+		trace("Install capability %s for %s", id, path);
+		if (symlinkat(path, dirfd(dir), id) < 0) {
+			log_error("Unable to create symbolic link %s/%s: %m", capability_dir_path, id);
+			goto failed;
+		}
+	}
+
+	/* All is well */
+	ok = true;
+
+failed:
+	closedir(dir);
+	strutil_array_destroy(&install);
+
+	return ok;
 }
 
 bool
-wormhole_capability_install(const char *id, const char *path)
+wormhole_capability_install(const struct strutil_array *provides, const char *path)
 {
+	char real_path[PATH_MAX];
+
+	/* Make sure we use a fully qualified path as symlink target */
+	if (realpath(path, real_path) == NULL) {
+		log_error("%s is not a valid path: %m", path);
+		return false;
+	}
+	path = real_path;
+
 	/* FIXME: support per-user capability directory. */
-	return __wormhole_capability_install(WORMHOLE_CAPABILITY_PATH, id, path);
+	return __wormhole_capability_install(WORMHOLE_CAPABILITY_PATH, provides, path);
 }
 
+/*
+ * Uninstall capability
+ */
+bool
+__wormhole_capability_uninstall(const char *capability_dir_path, const struct strutil_array *provides, const char *path)
+{
+	struct strutil_array remove;
+	unsigned int i;
+	DIR *dir;
+	bool ok;
+
+	if (!(dir = opendir(capability_dir_path))) {
+		log_error("Unable to open %s: %m", capability_dir_path);
+		return false;
+	}
+
+	strutil_array_init(&remove);
+
+	for (i = 0; i < provides->count; ++i) {
+		const char *id = provides->data[i];
+		char target[PATH_MAX];
+
+		if (readlinkat(dirfd(dir), id, target, sizeof(target)) < 0) {
+			trace("symlink for %s does not exist, nothing to deactivate", id);
+			continue;
+		}
+
+		if (!strutil_equal(path, target)) {
+			trace("Capability %s refers to a different config file", id);
+			continue;
+		}
+
+		strutil_array_append(&remove, id);
+	}
+
+	for (i = 0; i < remove.count; ++i) {
+		const char *id = remove.data[i];
+
+		trace("Remove capability %s for %s", id, path);
+		if (unlinkat(dirfd(dir), id, 0) < 0) {
+			log_error("Unable to remove symbolic link %s/%s: %m", capability_dir_path, id);
+			goto failed;
+		}
+	}
+
+	/* All is well */
+	ok = true;
+
+failed:
+	closedir(dir);
+	strutil_array_destroy(&remove);
+
+	return ok;
+}
+
+bool
+wormhole_capability_uninstall(const struct strutil_array *provides, const char *path)
+{
+	char real_path[PATH_MAX];
+
+	/* Make sure we use a fully qualified path as symlink target */
+	if (realpath(path, real_path) == NULL) {
+		log_error("%s is not a valid path: %m", path);
+		return false;
+	}
+	path = real_path;
+
+	/* FIXME: support per-user capability directory. */
+	return __wormhole_capability_uninstall(WORMHOLE_CAPABILITY_PATH, provides, path);
+}
+
+/*
+ * Garbage collect capabilities
+ */
 bool
 __wormhole_capabilities_gc(const char *capability_dir_path)
 {
@@ -292,6 +418,7 @@ __wormhole_capabilities_gc(const char *capability_dir_path)
 	for (i = 0; i < stale.count; ++i) {
 		const char *name = stale.data[i];
 
+		trace("Removing stale capability %s", name);
 		if (unlinkat(dirfd(dir), name, 0) < 0) {
 			log_error("Unable to remove stale capability link %s/%s",
 					capability_dir_path, name);

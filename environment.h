@@ -153,7 +153,8 @@ extern wormhole_path_state_t *	wormhole_tree_walk_next(wormhole_tree_walker_t *t
 extern void			wormhole_tree_walk_skip_children(wormhole_tree_walker_t *t);
 extern void			wormhole_tree_walk_end(wormhole_tree_walker_t *t);
 
-extern bool			wormhole_capability_install(const char *id, const char *path);
+extern bool			wormhole_capability_install(const struct strutil_array *provides, const char *path);
+extern bool			wormhole_capability_uninstall(const struct strutil_array *provides, const char *path);
 extern char *			wormhole_capability_get_best_match(const char *id);
 extern bool			wormhole_capabilities_gc(void);
 
