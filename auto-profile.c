@@ -348,7 +348,7 @@ perform_ignore(wormhole_tree_state_t *tree, const char *arg, struct wormhole_lay
 {
 	const char *path = __build_path(tree, arg);
 
-	if (fsutil_exists(path)) {
+	if (fsutil_exists_nofollow(path)) {
 		if (!opt_quiet)
 			log_info("Actively ignoring %s", arg);
 		wormhole_tree_state_set_ignore(tree, arg);
