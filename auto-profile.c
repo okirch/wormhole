@@ -87,8 +87,6 @@ static void		usage(int exval);
 struct autoprofile_state {
 	wormhole_tree_state_t *		tree;
 
-	char *				environment_name;
-
 	struct wormhole_config *	config;
 	struct wormhole_layer_config *	_layer;
 };
@@ -287,6 +285,27 @@ autoprofile_state_init(struct autoprofile_state *state, const char *tree_root)
 }
 
 void
+autoprofile_state_set_environment(struct autoprofile_state *state, const char *name)
+{
+	struct wormhole_environment_config *env;
+
+	/* There can only be one */
+	assert(state->config->environments == NULL);
+
+	env = calloc(1, sizeof(*env));
+	strutil_set(&env->name, name);
+
+	state->config->environments = env;
+}
+
+static inline const char *
+autoprofile_state_environment_name(const struct autoprofile_state *state)
+{
+	assert(state->config && state->config->environments);
+	return state->config->environments->name;
+}
+
+void
 autoprofile_state_create_layer(struct autoprofile_state *state, const char *root_directory)
 {
 	struct wormhole_layer_config *layer;
@@ -303,21 +322,16 @@ autoprofile_state_get_layer(const struct autoprofile_state *state)
 	return state->_layer;
 }
 
-void
-autoprofile_state_set_environment(struct autoprofile_state *state, const char *name)
-{
-	strutil_set(&state->environment_name, name);
-}
-
 static bool
 autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
 {
+	struct wormhole_environment_config *env = state->config->environments;
 	struct wormhole_layer_config *output = autoprofile_state_get_layer(state);
 	struct wormhole_profile_config *profile;
 	unsigned int i;
 	bool ok = true;
 
-	fprintf(fp, "environment %s {\n", state->environment_name);
+	fprintf(fp, "environment %s {\n", env->name);
 
 	for (i = 0; i < opt_provides.count; ++i)
 		fprintf(fp, "\tprovides %s\n", opt_provides.data[i]);
@@ -671,7 +685,7 @@ perform_check_binaries(struct autoprofile_state *state, const char *arg)
 		profile = calloc(1, sizeof(*profile));
 		strutil_set(&profile->name, d->d_name);
 		strutil_set(&profile->command, entry_path);
-		strutil_set(&profile->environment, state->environment_name);
+		strutil_set(&profile->environment, autoprofile_state_environment_name(state));
 		strutil_set(&profile->wrapper, __make_path(opt_wrapper_directory, d->d_name));
 
 		profile->next = state->config->profiles;
@@ -1124,12 +1138,13 @@ wormhole_auto_profile(const char *root_path)
 		return 1;
 
 	autoprofile_state_init(&state, tree_root);
-	autoprofile_state_create_layer(&state, output_tree_root);
 
 	if (opt_environment_name)
 		autoprofile_state_set_environment(&state, opt_environment_name);
 	else
 		autoprofile_state_set_environment(&state, pathutil_const_basename(root_path));
+
+	autoprofile_state_create_layer(&state, output_tree_root);
 
 	if (!autoprofile_process(config, &state))
 		return 1;
