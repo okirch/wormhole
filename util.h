@@ -65,6 +65,7 @@ extern const char *		fsutil_strip_path_prefix(const char *path, const char *pote
 extern bool			fsutil_isdir(const char *path);
 extern bool			fsutil_dir_is_empty(const char *path);
 extern bool			fsutil_exists(const char *path);
+extern bool			fsutil_exists_nofollow(const char *path);
 extern bool			fsutil_remove_recursively(const char *dir_path);
 
 /* ftw input flags */

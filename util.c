@@ -541,6 +541,16 @@ fsutil_exists(const char *path)
 }
 
 bool
+fsutil_exists_nofollow(const char *path)
+{
+	struct stat stb;
+
+	if (lstat(path, &stb) >= 0)
+		return true;
+	return false;
+}
+
+bool
 fsutil_dir_is_empty(const char *path)
 {
 	bool empty = true;
