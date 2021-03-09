@@ -270,8 +270,14 @@ autoprofile_state_init(struct autoprofile_state *state, const char *tree_root)
 	wormhole_tree_state_set_root(state->tree, tree_root);
 }
 
+void
+autoprofile_state_set_environment(struct autoprofile_state *state, const char *name)
+{
+	strutil_set(&state->environment_name, name);
+}
+
 static bool
-dump_config(struct autoprofile_state *state, FILE *fp)
+autoprofile_state_output(struct autoprofile_state *state, FILE *fp)
 {
 	struct wormhole_layer_config *output = state->layer;
 	struct wormhole_profile_config *profile;
@@ -346,7 +352,29 @@ dump_config(struct autoprofile_state *state, FILE *fp)
 		fprintf(fp, "}\n");
 	}
 
+	fflush(fp);
 	return ok;
+}
+
+static bool
+autoprofile_write_file(struct autoprofile_state *state, const char *filename)
+{
+	bool result;
+	FILE *fp;
+
+	if (opt_output == NULL || !strcmp(opt_output, "-"))
+		return autoprofile_state_output(state, stdout);
+
+	fp = fopen(opt_output, "w");
+	if (fp == NULL) {
+		log_error("Unable to open %s for writing: %m", opt_output);
+		return false;
+	}
+
+	result = autoprofile_state_output(state, fp);
+	fclose(fp);
+
+	return result;
 }
 
 static const char *
@@ -822,7 +850,7 @@ failed:
 }
 
 static bool
-perform(struct autoprofile_config *config, struct autoprofile_state *state)
+autoprofile_process(struct autoprofile_config *config, struct autoprofile_state *state)
 {
 	struct action *a;
 
@@ -1032,9 +1060,6 @@ wormhole_auto_profile(const char *root_path)
 {
 	const char *subdir;
 	const char *tree_root, *output_tree_root;
-	const char *env_name;
-	FILE *fp;
-	int retval = 0;
 	struct autoprofile_config *config;
 	struct autoprofile_state state;
 
@@ -1054,6 +1079,11 @@ wormhole_auto_profile(const char *root_path)
 		} else {
 			output_tree_root = strdup(subdir);
 		}
+	} else {
+		if (opt_output && !strcmp(opt_output, "auto")) {
+			log_error("Cannot determine path of output file (you requested \"auto\" mode)");
+			return false;
+		}
 	}
 
 	config = load_autoprofile_config(opt_profile, &opt_check_binaries);
@@ -1063,11 +1093,12 @@ wormhole_auto_profile(const char *root_path)
 	autoprofile_state_init(&state, tree_root);
 	state.layer = alloc_layer_config(output_tree_root);
 
-	if ((env_name = opt_environment_name) == NULL)
-		env_name = pathutil_const_basename(root_path);
-	strutil_set(&state.environment_name, env_name);
+	if (opt_environment_name)
+		autoprofile_state_set_environment(&state, opt_environment_name);
+	else
+		autoprofile_state_set_environment(&state, pathutil_const_basename(root_path));
 
-	if (!perform(config, &state))
+	if (!autoprofile_process(config, &state))
 		return 1;
 
 	if (!config->ignore_stray_files) {
@@ -1075,25 +1106,11 @@ wormhole_auto_profile(const char *root_path)
 			return 1;
 	}
 
-	if (opt_output != NULL && strcmp(opt_output, "-")) {
-		if (!strcmp(opt_output, "auto"))
-			log_fatal("Don't know where to write output file (you requested \"auto\" mode)");
-
-		fp = fopen(opt_output, "w");
-		if (fp == NULL)
-			log_fatal("Unable to open %s for writing: %m", opt_output);
-
-		dump_config(&state, fp);
-		fclose(fp);
-
-		printf("Environment definition written to %s\n", opt_output);
-	} else {
-		dump_config(&state, stdout);
-		fflush(stdout);
-	}
+	if (!autoprofile_write_file(&state, opt_output))
+		return 1;
 
 	if (opt_exclude_file)
 		write_exclude_file(opt_exclude_file, state.tree);
 
-	return retval;
+	return 0;
 }
