@@ -35,6 +35,34 @@
 #include "util.h"
 #include "tracing.h"
 
+
+/*
+ * We keep a directory to map capability strings to wormhole config files.
+ * A capability looks a lot like a $name-$version string used by package
+ * managers like rpm.
+ *
+ * The directory contains a farm of symbolic links.
+ * Each link represents a capability string, and it points at the config
+ * file that defines a layer or image providing this capability.
+ *
+ * When requiring a capability, we try to resolve it by scanning this
+ * directory for links that
+ *  (a) match $name
+ *  (b) have a $version that is greater than or equal the version
+ *      required
+ * If we encounter several such links, we return the one with the highest
+ * version.
+ *
+ * IOW, the current system implies strict upward ABI compatibility.
+ * This probably needs to be enhanced to resemble more something like
+ * the semantic versioninig implemented by ruby's ~> operator
+ */
+
+/*
+ * Similarly, we keep a second directory to map command names to
+ * wormhole config files in the same way.
+ */
+
 #define WORMHOLE_CAPABILITY_VERSION_MAX		16
 
 typedef struct wormhole_capability {
@@ -219,32 +247,10 @@ wormhole_capability_parse(const char *id)
 }
 
 /*
- * We keep a directory to map capability strings to wormhole config files.
- * A capability looks a lot like a $name-$version string used by package
- * managers like rpm.
- *
- * The directory contains a farm of symbolic links.
- * Each link represents a capability string, and it points at the config
- * file that defines a layer or image providing this capability.
- *
- * When requiring a capability, we try to resolve it by scanning this
- * directory for links that
- *  (a) match $name
- *  (b) have a $version that is greater than or equal the version
- *      required
- * If we encounter several such links, we return the one with the highest
- * version.
- *
- * IOW, the current system implies strict upward ABI compatibility.
- * This probably needs to be enhanced to resemble more something like
- * the semantic versioninig implemented by ruby's ~> operator
- */
-
-/*
  * Install capability
  */
 bool
-__wormhole_capability_install(const char *capability_dir_path, const struct strutil_array *provides, const char *path)
+__wormhole_capability_register(const char *capability_dir_path, const struct strutil_array *provides, const char *path)
 {
 	struct strutil_array install;
 	unsigned int i;
@@ -301,7 +307,7 @@ failed:
 }
 
 bool
-wormhole_capability_install(const struct strutil_array *provides, const char *path)
+wormhole_capability_register(const struct strutil_array *provides, const char *path)
 {
 	char real_path[PATH_MAX];
 
@@ -313,14 +319,14 @@ wormhole_capability_install(const struct strutil_array *provides, const char *pa
 	path = real_path;
 
 	/* FIXME: support per-user capability directory. */
-	return __wormhole_capability_install(WORMHOLE_CAPABILITY_PATH, provides, path);
+	return __wormhole_capability_register(WORMHOLE_CAPABILITY_PATH, provides, path);
 }
 
 /*
  * Uninstall capability
  */
 bool
-__wormhole_capability_uninstall(const char *capability_dir_path, const struct strutil_array *provides, const char *path)
+__wormhole_capability_unregister(const char *capability_dir_path, const struct strutil_array *provides, const char *path)
 {
 	struct strutil_array remove;
 	unsigned int i;
@@ -372,7 +378,7 @@ failed:
 }
 
 bool
-wormhole_capability_uninstall(const struct strutil_array *provides, const char *path)
+wormhole_capability_unregister(const struct strutil_array *provides, const char *path)
 {
 	char real_path[PATH_MAX];
 
@@ -384,7 +390,7 @@ wormhole_capability_uninstall(const struct strutil_array *provides, const char *
 	path = real_path;
 
 	/* FIXME: support per-user capability directory. */
-	return __wormhole_capability_uninstall(WORMHOLE_CAPABILITY_PATH, provides, path);
+	return __wormhole_capability_unregister(WORMHOLE_CAPABILITY_PATH, provides, path);
 }
 
 /*

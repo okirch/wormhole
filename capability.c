@@ -165,7 +165,7 @@ wormhole_capability(int argc, char **argv)
 			return true;
 		}
 
-		return wormhole_capability_install(&provides, path);
+		return wormhole_capability_register(&provides, path);
 	}
 
 	if (!strcmp(action, "deactivate")) {
@@ -181,10 +181,9 @@ wormhole_capability(int argc, char **argv)
 			return true;
 		}
 
-		return wormhole_capability_uninstall(&provides, path);
+		return wormhole_capability_unregister(&provides, path);
 	}
 
 	log_error("wormhole-capability: unsupported action \"%s\"", action);
 	return false;
 }
-
