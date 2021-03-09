@@ -811,6 +811,20 @@ fsutil_check_path_prefix(const char *path, const char *potential_prefix)
 	return fsutil_strip_path_prefix(path, potential_prefix) != NULL;
 }
 
+bool
+fsutil_same_file(const char *path1, const char *path2)
+{
+	struct stat stb1, stb2;
+
+	if (stat(path1, &stb1) < 0)
+		return false;
+	if (stat(path2, &stb2) < 0)
+		return false;
+
+	return stb1.st_dev == stb2.st_dev
+	    && stb1.st_ino == stb2.st_ino;
+}
+
 /*
  * Rather special kind of file comparison
  */
