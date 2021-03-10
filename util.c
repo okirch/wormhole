@@ -476,6 +476,33 @@ fsutil_tempdir_cleanup(struct fsutil_tempdir *td)
 	return 0;
 }
 
+int
+fsutil_tempfile(const char *basename, char *path, size_t size)
+{
+	char template[PATH_MAX];
+	const char *tempdir;
+	int fd;
+
+	if ((tempdir = getenv("TMPDIR")) == NULL)
+		tempdir = "/tmp";
+	snprintf(template, sizeof(template), "%s/%s.XXXXXX", tempdir, basename);
+
+	if ((fd = mkstemp(template)) < 0) {
+		log_error("Unable to create temporary file %s.* in %s", basename, tempdir);
+		return -1;
+	}
+
+	if (strlen(template) + 1 > size) {
+		log_error("%s: return buffer too small", __func__);
+		unlink(template);
+		close(fd);
+		return -1;
+	}
+
+	strncpy(path, template, size);
+	return fd;
+}
+
 static int
 __fsutil_makedirs(char *path, int mode)
 {

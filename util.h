@@ -57,6 +57,7 @@ extern bool			wormhole_create_user_namespace(void);
 extern void			fsutil_tempdir_init(struct fsutil_tempdir *td);
 extern char *			fsutil_tempdir_path(struct fsutil_tempdir *td);
 extern int			fsutil_tempdir_cleanup(struct fsutil_tempdir *td);
+extern int			fsutil_tempfile(const char *basename, char *path, size_t size);
 
 extern bool			fsutil_makedirs(const char *path, int mode);
 extern bool			fsutil_create_empty(const char *path);
