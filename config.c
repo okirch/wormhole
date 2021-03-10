@@ -1073,6 +1073,8 @@ __wormhole_environment_config_write(const struct wormhole_environment_config *en
 			ok = false;
 	}
 
+	fprintf(stderr, "}\n");
+
 	return ok;
 }
 
