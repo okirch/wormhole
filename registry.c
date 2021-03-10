@@ -196,7 +196,7 @@ __wormhole_capability_parse(const char *id, wormhole_capability_t *cap)
 	strutil_set(&cap->id, id);
 	strutil_set(&cap->name, id);
 
-	if ((dash = strrchr(cap->name, '-')) == NULL || !isdigit(*dash)) {
+	if ((dash = strrchr(cap->name, '-')) == NULL || !isdigit(dash[1])) {
 		/* This is a name without a version */
 		cap->name_len = strlen(cap->name);
 		return false;
