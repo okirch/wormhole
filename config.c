@@ -1047,7 +1047,6 @@ __wormhole_layer_config_write(const struct wormhole_layer_config *output, FILE *
 		}
 	}
 	fprintf(fp, "\t}\n");
-	fprintf(fp, "}\n");
 
 	return ok;
 }
@@ -1073,7 +1072,7 @@ __wormhole_environment_config_write(const struct wormhole_environment_config *en
 			ok = false;
 	}
 
-	fprintf(stderr, "}\n");
+	fprintf(fp, "}\n");
 
 	return ok;
 }
