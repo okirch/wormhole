@@ -59,6 +59,7 @@ struct option wormhole_options[] = {
 };
 
 const char *		opt_config_path = NULL;
+const char *		opt_environment_name = NULL;
 const char *		opt_base_environment = NULL;
 const char *		opt_overlay_root = NULL;
 bool			opt_privileged_namespace = false;
@@ -327,10 +328,10 @@ remount_filesystems(wormhole_environment_t *env, wormhole_tree_state_t *mnt_tree
 		const char *fstype;
 
 		if (ps->state != WORMHOLE_PATH_STATE_SYSTEM_MOUNT)
-			continue; /* should not happen */
+			continue; /* should not happen given how we constructed mnt_tree */
 
 		if (!strcmp(mount_point, "/")) {
-			trace("Got root");
+			trace("Skipping root directory");
 			continue;
 		}
 
@@ -530,6 +531,34 @@ clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 	return true;
 }
 
+static bool
+write_config(const char *root_dir, wormhole_environment_t *env)
+{
+	char pathname[PATH_MAX];
+	struct wormhole_config *cfg;
+	struct wormhole_environment_config *env_cfg;
+	struct wormhole_layer_config *layer_cfg;
+	bool ok;
+
+	layer_cfg = calloc(1, sizeof(*layer_cfg));
+	strutil_set(&layer_cfg->directory, "tree");
+
+	env_cfg = calloc(1, sizeof(*env_cfg));
+	strutil_set(&env_cfg->name, env->name);
+	strutil_array_append_array(&env_cfg->requires, &env->requires);
+	env_cfg->layers = layer_cfg;
+
+	cfg = calloc(1, sizeof(*cfg));
+	cfg->environments = env_cfg;
+
+	snprintf(pathname, sizeof(pathname), "%s/.digger.conf", root_dir);
+
+	ok = wormhole_config_write(cfg, pathname);
+	wormhole_config_free(cfg);
+
+	return ok;
+}
+
 static char **
 make_argv_shell(void)
 {
@@ -587,6 +616,9 @@ wormhole_digger(int argc, char **argv)
 		return false;
 	}
 
+	if (opt_environment_name == NULL)
+		opt_environment_name = pathutil_const_basename(opt_overlay_root);
+
 	if (opt_base_environment != 0) {
 		/* Set up base environment */
                 if ((env = wormhole_environment_by_capability(opt_base_environment)) == NULL) {
@@ -596,10 +628,10 @@ wormhole_digger(int argc, char **argv)
 
 		trace("Using environment %s (type %d)", env->name, env->layer[0]->type);
 
-		env = wormhole_environment_new("digger", env);
+		env = wormhole_environment_new(opt_environment_name, env);
 		strutil_array_append(&env->requires, opt_base_environment);
 	} else {
-		env = wormhole_environment_new("digger", NULL);
+		env = wormhole_environment_new(opt_environment_name, NULL);
 	}
 
 	if (!smoke_and_mirrors(env, opt_overlay_root)) {
@@ -651,6 +683,11 @@ wormhole_digger(int argc, char **argv)
 
 	if (!clean_tree(opt_overlay_root, assembled_tree)) {
 		log_error("Error during cleanup");
+		return false;
+	}
+
+	if (!write_config(opt_overlay_root, env)) {
+		log_error("failed to write config file");
 		return false;
 	}
 
