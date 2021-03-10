@@ -240,7 +240,84 @@ __make_path(const char *root_path, const char *relative_path)
 	return buf;
 }
 
-void
+static bool
+try_read_digger_config(struct autoprofile_state *state, const char *base_dir)
+{
+	const char *digger_conf_path, *tree_root, *relative_tree_root;
+	struct wormhole_config *cfg;
+
+	digger_conf_path = __make_path(base_dir, ".digger.conf");
+	if (!fsutil_exists(digger_conf_path))
+		return true;
+
+	if (!opt_quiet)
+		log_info("This looks like a tree created by wormhole-digger");
+
+	if (!(cfg = wormhole_config_load(digger_conf_path))) {
+		log_error("Unable to read digger config file %s", digger_conf_path);
+		return false;
+	}
+
+	if (!cfg->environments || cfg->environments->next) {
+		log_error("%s: should contain exactly one environment", digger_conf_path);
+		return false;
+	}
+
+	state->_layer = cfg->environments->layers;
+	if (!state->_layer || state->_layer->next) {
+		log_error("%s: should contain exactly one layer", digger_conf_path);
+		return false;
+	}
+
+	tree_root = state->_layer->directory;
+	if (tree_root == NULL) {
+		log_error("%s: layer does not specify a directory", digger_conf_path);
+		return false;
+	}
+
+	trace("%s: root is %s", __func__, tree_root);
+	wormhole_tree_state_set_root(state->tree, tree_root);
+
+	/* Usually, wormhole-digger will create the directory tree as $base_dir/tree;
+	 * we would like to refer to the relative name (ie "tree") in the config file.
+	 */
+	if ((relative_tree_root = fsutil_strip_path_prefix(tree_root, base_dir)) != NULL) {
+		while (*relative_tree_root == '/')
+			++relative_tree_root;
+		strutil_set(&state->_layer->directory, relative_tree_root);
+	}
+
+	/* Override the path that the config should be written to */
+	if (strutil_equal(opt_output, "auto"))
+		strutil_set(&cfg->path, __make_path(base_dir, "environ.conf"));
+	else
+		strutil_set(&cfg->path, opt_output);
+
+	state->config = cfg;
+
+#if 0
+	subdir = __make_path(root_path, "tree");
+	if (fsutil_isdir(subdir)) {
+		if (!opt_quiet)
+			log_info("This looks like a tree created by wormhole-digger, assuming the file system root is at %s", subdir);
+
+		tree_root = strdup(subdir);
+
+		if (opt_output && !strcmp(opt_output, "auto")) {
+			opt_output = strdup(__make_path(root_path, "environ.conf"));
+			output_tree_root = "tree";
+		} else {
+			output_tree_root = strdup(subdir);
+		}
+	}
+#endif
+	return true;
+}
+
+static void	autoprofile_state_set_environment(struct autoprofile_state *state, const char *name);
+static void	autoprofile_state_create_layer(struct autoprofile_state *state, const char *root_directory);
+
+bool
 autoprofile_state_init(struct autoprofile_state *state, const char *tree_root)
 {
 	struct wormhole_config *config;
@@ -250,8 +327,30 @@ autoprofile_state_init(struct autoprofile_state *state, const char *tree_root)
 	state->tree = wormhole_tree_state_new();
 	wormhole_tree_state_set_root(state->tree, tree_root);
 
+	if (!try_read_digger_config(state, tree_root)) {
+		log_error("bad overlay tree at %s", tree_root);
+		return false;
+	}
+
+	if (state->config != NULL)
+		return true; /* try_read_digger_config actually did read something */
+
+	/* If the output tree is not under $tree_root/tree, then
+	 * an output filename of "auto" does not make sense.
+	 */
+	if (strutil_equal(opt_output, "auto")) {
+		log_error("Cannot determine path of output file (you requested \"auto\" mode)");
+		return false;
+	}
+
 	config = calloc(1, sizeof(*config));
+	strutil_set(&config->path, opt_output);
 	state->config = config;
+
+	autoprofile_state_set_environment(state, pathutil_const_basename(tree_root));
+	autoprofile_state_create_layer(state, tree_root);
+
+	return true;
 }
 
 void
@@ -259,13 +358,12 @@ autoprofile_state_set_environment(struct autoprofile_state *state, const char *n
 {
 	struct wormhole_environment_config *env;
 
-	/* There can only be one */
-	assert(state->config->environments == NULL);
+	if ((env = state->config->environments) == NULL) {
+		env = calloc(1, sizeof(*env));
+		state->config->environments = env;
+	}
 
-	env = calloc(1, sizeof(*env));
 	strutil_set(&env->name, name);
-
-	state->config->environments = env;
 }
 
 static inline const char *
@@ -311,6 +409,7 @@ autoprofile_state_create_layer(struct autoprofile_state *state, const char *root
 static inline struct wormhole_layer_config *
 autoprofile_state_get_layer(const struct autoprofile_state *state)
 {
+	assert(state->_layer);
 	return state->_layer;
 }
 
@@ -992,52 +1091,25 @@ write_exclude_file(const char *exclude_file, wormhole_tree_state_t *tree)
 int
 wormhole_auto_profile(const char *root_path)
 {
-	const char *subdir;
-	const char *tree_root, *output_tree_root;
 	struct autoprofile_config *config;
 	struct autoprofile_state state;
 
 	if (opt_base_environment)
 		log_fatal("The --base-environment option is not yet implemented");
 
-	tree_root = root_path;
-	output_tree_root = root_path;
+	if (!autoprofile_state_init(&state, root_path))
+		return 1;
 
-	subdir = __make_path(root_path, "tree");
-	if (fsutil_isdir(subdir)) {
-		if (!opt_quiet)
-			log_info("This looks like a tree created by wormhole-digger, assuming the file system root is at %s", subdir);
-
-		tree_root = strdup(subdir);
-
-		if (opt_output && !strcmp(opt_output, "auto")) {
-			opt_output = strdup(__make_path(root_path, "environ.conf"));
-			output_tree_root = "tree";
-		} else {
-			output_tree_root = strdup(subdir);
-		}
-	} else {
-		if (opt_output && !strcmp(opt_output, "auto")) {
-			log_error("Cannot determine path of output file (you requested \"auto\" mode)");
-			return false;
-		}
-	}
 
 	config = load_autoprofile_config(opt_profile, &opt_check_binaries);
 	if (config == NULL)
 		return 1;
 
-	autoprofile_state_init(&state, tree_root);
-
 	if (opt_environment_name)
 		autoprofile_state_set_environment(&state, opt_environment_name);
-	else
-		autoprofile_state_set_environment(&state, pathutil_const_basename(root_path));
 
 	autoprofile_state_set_requires(&state, &opt_requires);
 	autoprofile_state_set_provides(&state, &opt_provides);
-
-	autoprofile_state_create_layer(&state, output_tree_root);
 
 	if (!autoprofile_process(config, &state))
 		return 1;
@@ -1047,7 +1119,9 @@ wormhole_auto_profile(const char *root_path)
 			return 1;
 	}
 
-	if (!wormhole_config_write(state.config, opt_output))
+	if (!opt_quiet && state.config->path)
+		log_info("Writing configuration file to %s", state.config->path);
+	if (!wormhole_config_write(state.config, state.config->path))
 		return 1;
 
 	if (opt_exclude_file)
