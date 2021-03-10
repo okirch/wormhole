@@ -437,6 +437,61 @@ smoke_and_mirrors(wormhole_environment_t *env, const char *overlay_dir)
 	return true;
 }
 
+/*
+ * Export a file named /provides to the container.
+ * The build script should write to this file the capabilities provided by
+ * this wormhole layer.
+ */
+static int	__provides_fd = -1;
+
+static bool
+mount_provides_file(wormhole_environment_t *env)
+{
+	char hostpath[PATH_MAX];
+	int fd;
+
+	fd = fsutil_tempfile("provides", hostpath, sizeof(hostpath));
+	if (fd < 0)
+		return false;
+
+	if (!__bind_mount_file(env, hostpath, "/provides")) {
+		log_error("Failed to set up /provides file");
+		remove(hostpath);
+		close(fd);
+		return false;
+	}
+
+	remove(hostpath);
+	__provides_fd = fd;
+	return true;
+}
+
+static bool
+update_provides(wormhole_environment_t *env)
+{
+	char line[256];
+	FILE *fp;
+
+	if (__provides_fd < 0)
+		return true;
+
+	if (!(fp = fdopen(__provides_fd, "r"))) {
+		log_error("fdopen of provides_fd failed: %m");
+		return false;
+	}
+
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		line[strcspn(line, "\r\n")] = '\0';
+
+		trace("Image provides %s", line);
+		strutil_array_append(&env->provides, line);
+	}
+
+	fclose(fp);
+
+	return true;
+}
+
 static bool
 combine_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 {
@@ -521,7 +576,10 @@ clean_tree(const char *overlay_root, wormhole_tree_state_t *assembled_tree)
 	wormhole_tree_walk_end(walk);
 
 	if (!remove_subdir(overlay_root, "work")
-	 || !remove_subdir(overlay_root, "lower"))
+	 || !remove_subdir(overlay_root, "lower")
+	 || !remove_subdir(overlay_root, "tree/build.sh")
+	 || !remove_subdir(overlay_root, "tree/build")
+	 || !remove_subdir(overlay_root, "tree/provides"))
 		return false;
 
 	root_dir = wormhole_tree_state_get_root(assembled_tree);
@@ -546,6 +604,7 @@ write_config(const char *root_dir, wormhole_environment_t *env)
 	env_cfg = calloc(1, sizeof(*env_cfg));
 	strutil_set(&env_cfg->name, env->name);
 	strutil_array_append_array(&env_cfg->requires, &env->requires);
+	strutil_array_append_array(&env_cfg->provides, &env->provides);
 	env_cfg->layers = layer_cfg;
 
 	cfg = calloc(1, sizeof(*cfg));
@@ -659,6 +718,9 @@ wormhole_digger(int argc, char **argv)
 		*--argv = "/build.sh";
 	}
 
+	if (!mount_provides_file(env))
+		return false;
+
 	assembled_tree = env->tree_state;
 	root_dir = env->root_directory;
 
@@ -685,6 +747,9 @@ wormhole_digger(int argc, char **argv)
 		log_error("Error during cleanup");
 		return false;
 	}
+
+	if (!update_provides(env))
+		return false;
 
 	if (!write_config(opt_overlay_root, env)) {
 		log_error("failed to write config file");
