@@ -513,12 +513,18 @@ __fsutil_makedirs(char *path, int mode)
 	if (mkdir(path, mode) == 0)
 		return 0;
 
+	if (errno == EEXIST)
+		return 0;
+
 	slash = strrchr(path, '/');
 	while (slash > path && slash[-1] == '/')
 		--slash;
 	slash[0] = '\0';
 
-	ret = __fsutil_makedirs(path, mode);
+	if (*path)
+		ret = __fsutil_makedirs(path, mode);
+	else
+		ret = 0;
 
 	slash[0] = '/';
 	if (ret >= 0)
