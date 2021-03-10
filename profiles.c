@@ -667,6 +667,11 @@ _pathinfo_overlay_one(wormhole_environment_t *environment,
 	if (!fsutil_mount_overlay(lower_path_list, NULL, NULL, target))
 		return false;
 #else
+	if (!fsutil_makedirs(workdir, 0755)) {
+		log_error("Failed to create overlay workdir for %s at %s", dest, workdir);
+		return false;
+	}
+
 	/* Overlay "source" on top of "target" and mount at path "target" */
 	if (!fsutil_mount_overlay(target, source, workdir, target))
 		return false;
@@ -702,17 +707,12 @@ pathinfo_overlay_path(wormhole_environment_t *environment, const wormhole_path_i
 			const char *dest, const char *source)
 {
 	char pathbuf[PATH_MAX];
-	const char *workdir;
+	const char *workdir = NULL;
 
 	trace2("%s(%s, %s)", __func__, dest, source);
 
 	snprintf(pathbuf, sizeof(pathbuf), "/work%s", dest);
 	workdir = wormhole_scaffold_source_path(scaffold, pathbuf);
-
-	if (!fsutil_makedirs(workdir, 0755)) {
-		log_error("Failed to create overlay workdir for %s at %s", dest, workdir);
-		return false;
-	}
 
 	return _pathinfo_overlay_one(environment, source, dest, workdir);
 }
@@ -1043,8 +1043,10 @@ wormhole_layer_setup(wormhole_environment_t *env, const struct wormhole_layer_co
 			return false;
 		}
 
+		trace("Image layer: overlaying directories from / onto %s", env->root_directory);
 		scaffold.source_dir = NULL;
 	} else {
+		trace("Overlay layer: overlaying directories from %s onto %s", overlay_root, env->root_directory?: "/");
 		scaffold.source_dir = overlay_root;
 	}
 
