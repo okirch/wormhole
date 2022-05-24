@@ -8,5 +8,6 @@ wormhole
 wormhole-autoprofile
 wormhole-digger
 wormhole-capability
+wormhole-img2tree
 wormholed
 config-test
