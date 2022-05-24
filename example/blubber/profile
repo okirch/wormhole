@@ -1,0 +1,24 @@
+# This is a rather silly example that tries to demonstrate how wormhole can run
+# commands in a user container with some additional directories mounted.
+#
+# Note that wormhole can quite a bit more, but I'm no longer sure how much of that
+# is really useful.
+#
+profile blubber {
+	wrapper		/usr/bin/blubber
+	command		/opt/bin/blubber
+	environment	blubber-env
+}
+
+environment blubber-env {
+	provides blubber
+
+	define-layer {
+		directory /usr/lib/sysimage/wormhole/blubber/tree
+
+		bind /opt
+		mount /var/tmp tmpfs
+	}
+}
+
+

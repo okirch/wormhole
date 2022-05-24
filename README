@@ -1,0 +1,7 @@
+
+There's a lot of stuff in here that is largely experimental; especially
+in the context of building images.
+
+For an example on shrink-wrapping an application with its own set of
+libraries, see example/blubber.
+
