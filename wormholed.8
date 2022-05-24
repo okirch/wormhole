@@ -1,0 +1,71 @@
+.\"  Copyright (C) 2020-2021 Olaf Kirch <okir@suse.de>
+.\"
+.\"  This program is free software; you can redistribute it and/or modify
+.\"  it under the terms of the GNU General Public License as published by
+.\"  the Free Software Foundation; either version 2 of the License, or
+.\"  (at your option) any later version.
+.\"
+.\"  This program is distributed in the hope that it will be useful,
+.\"  but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"  GNU General Public License for more details.
+.\"
+.\"  You should have received a copy of the GNU General Public License
+.\"  along with this program; if not, write to the Free Software
+.\"  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.TH WORMHOLED 8 "6 Sep 2020"
+.UC 6
+.SH NAME
+wormholed - daemon process to manage file system namespaces
+.SH SYNOPSIS
+.BR wormholed " [ \fIoptions\fP ...]
+.SH DESCRIPTION
+This daemon listens on a unix socket for requests to access a kernel (file system)
+namespace. These namespaces represent execution environments, which can be configured via
+.BR wormholed.conf (5).
+Clients can contact it via the
+.BR wormhole (1)
+client utility to request access to one of the configured environments.
+If the request is granted, the daemon will set up the environment (if this has not
+already happened), and pass an open file descriptor to that namespace to the client,
+optionally with the path of a command to execute within that environment.
+.P
+The 
+.B wormhole
+client will change to this namespace and run the provided command within that context.
+.SH OPTIONS
+.B wormholed
+recognizes the following command line options:
+.TP
+.B \-\-foreground
+Do not background the process; keep running in the foreground.
+.TP
+.BI "\-\-runtime " name
+Some environments may be based on a container image, and thus need a container runtime
+in order to start them. Using the
+.B \-\-runtime
+option, a container runtime other than the default can be used.
+.IP
+At the moment, the only supported runtime is \fBpodman\fP.
+.TP
+.BI "\-\-name " name
+By default,
+.B wormholed
+will listen on local domain socket
+.BR /var/run/wormhole.sock .
+Using this option, you can change the server socket to some other name. The
+.I name
+argument should either refer to an absolute path name starting with
+.BR / ,
+or an abstract local socket name starting with
+.BR @ .
+.TP
+.BI \-\-debug
+Enable tracing of the daemon's operations.
+.SH SEE ALSO
+.BR wormhole (1),
+.BR wormhole.conf (5),
+.BR ns-exec (1).
+.SH AUTHORS
+Written by Olaf Kirch <okir@suse.com>
